@@ -21,12 +21,13 @@ public:
   if(waveOutPrepareHeader(device,&header,sizeof(header))!=MMSYSERR_NOERROR) { Close(); return false; }
   return true;
  }
- void Play(int slot) {
-  if(!device) return;
+ bool Play(int slot,DWORD volume=0) {
+  if(!device) return false;
   waveOutReset(device);
-  waveOutSetVolume(device,ServoChannelVolume(slot));
-  waveOutWrite(device,&header,sizeof(header));
+  waveOutSetVolume(device,volume?volume:ServoChannelVolume(slot));
+  return waveOutWrite(device,&header,sizeof(header))==MMSYSERR_NOERROR;
  }
+ void Stop() { if(device) waveOutReset(device); }
  void Close() {
   if(device) { waveOutReset(device); if(header.dwFlags&WHDR_PREPARED) waveOutUnprepareHeader(device,&header,sizeof(header)); waveOutClose(device); }
   device=nullptr; header={}; samples.clear();

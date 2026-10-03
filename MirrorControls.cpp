@@ -69,6 +69,7 @@ bool servoEnabled=true;
 ServoLoop servo;
 SelectionClick selectionClick;
 SelectionClick exitClick;
+SelectionClick exitVoice;
 bool selectionClicksEnabled=true;
 void PlaySelectionClick(int slot) { if(slot<0) exitClick.Play(4); else selectionClick.Play(slot==6?4:slot); }
 void (*playSelectionClick)(int)=PlaySelectionClick;
@@ -77,7 +78,16 @@ int announcedSlot=-1;
 bool cuePlaying=false;
 std::array<std::wstring,5> cuePaths{};
 using PlayCueFn=BOOL(WINAPI*)(LPCWSTR,HMODULE,DWORD);
-PlayCueFn playCueSound=PlaySoundW;
+// Exit speech has its own output stream instead of the shared PlaySound channel.
+BOOL WINAPI PlayAdjustmentCue(LPCWSTR path,HMODULE module,DWORD flags) {
+ if(path && !cuePaths[4].empty() && cuePaths[4]==path) {
+  PlaySoundW(nullptr,nullptr,0);
+  return exitVoice.Play(4,0xffffffffu)?TRUE:FALSE;
+ }
+ exitVoice.Stop();
+ return PlaySoundW(path,module,flags);
+}
+PlayCueFn playCueSound=PlayAdjustmentCue;
 unsigned char previousHeld=0;
 int lastCycleSlot=-1;
 int heldCycleSlot=-1;
@@ -384,7 +394,7 @@ bool DefaultBindingNeeded(const nlohmann::json& saved,const char* group,const ch
 void BuildManifest(SPF_Manifest_Builder_Handle* h,const SPF_Manifest_Builder_API* api) {
     const auto saved=ReadSavedSettings(PluginFolder()/"config"/"settings.json");
     api->Info_SetName(h,kName);
-    api->Info_SetVersion(h,"0.2.3");
+    api->Info_SetVersion(h,"0.2.4");
     api->Info_SetMinFrameworkVersion(h,"1.2.5");
     api->Info_SetAuthor(h,"SPF Adjustment Hotkeys");
     api->Info_SetDescriptionLiteral(h,"Live mirror and native VR seat adjustment through SPF hotkeys.");
@@ -445,6 +455,7 @@ void OnActivated(const SPF_Core_API* api) {
     if(!servo.Open(PluginFolder()/"sounds"/"servo.wav")) Log(SPF_LOG_WARN,"MIRRORS: servo sound unavailable; check sounds/servo.wav and Windows audio output.");
     if(!selectionClick.Open(PluginFolder()/"sounds"/"click.wav")) Log(SPF_LOG_WARN,"MIRRORS: selection click unavailable; check sounds/click.wav and Windows audio output.");
     if(!exitClick.Open(PluginFolder()/"sounds"/"exit.wav")) Log(SPF_LOG_WARN,"Adjustment exit click unavailable; check sounds/exit.wav.");
+    if(!exitVoice.Open(PluginFolder()/"sounds"/"off.wav")) Log(SPF_LOG_WARN,"Adjustment exit voice stream unavailable; check sounds/off.wav.");
     RegisterSeatHooks();
     observing.store(true);
     updateHook=hooks->Hook_Register(kName,"MirrorContext","Observe mirror context",reinterpret_cast<void*>(DetourUpdate),reinterpret_cast<void**>(&originalUpdate),kUpdatePattern,true);
@@ -514,7 +525,7 @@ void OnUpdate() {
     }
 }
 void OnUnload() {
-    StopVoiceCue(); servo.Close(); selectionClick.Close(); exitClick.Close();
+    StopVoiceCue(); servo.Close(); selectionClick.Close(); exitClick.Close(); exitVoice.Close();
     // SPF removes hook objects after OnUnload. Preserve trampolines until then.
     ClearSeatCalibration(); ExitCenter(); movementAllowed.store(false);
     observing.store(false);
