@@ -1,0 +1,26 @@
+SPF Mirror Controls 0.1.7 -- stereo servo cues
+
+Close ATS; replace the DLL and copy the sounds folder. Keep your config folder.
+Servo sound plays while adjustment directions are held and stops on release/exit.
+The included stereo servo.wav is required.
+
+LEFT mirror: left channel only.
+CENTER mirror: both channels.
+RIGHT mirror: right channel only.
+This is fixed stereo channel routing, not a world-positioned or head-tracked VR
+sound. SPF exposes positioned FMOD events, but this WAV implementation does not
+use an authored FMOD bank or verified head-tracked listener. Stereo is the requested
+fallback. Spoken selection cues continue on their own Windows audio stream.
+
+SPF Settings > SPF_MirrorControls > General Settings > Mirror servo sound mutes it.
+The servo stream's volume is 25 percent on each active channel. Windows stereo
+output is required to hear the separation; mono/downmixed output will combine it.
+
+Hold/cycle, saved bindings, WASD-only fresh defaults and voice cues remain. Keep
+older center-only/diagnostic mirror plugins disabled. Exact executable pin remains.
+
+Release build and regression tests pass: channel-mask mapping, stereo/mono PCM
+header validation, movement/release/opposing-key/mute guards and all prior native
+hook, hold/cycle, voice and persistence cases. This servo/audio-routing update still
+needs in-game testing on your headset: test each mirror, release, switch while
+moving and ensure the voice cue remains audible alongside the servo loop.
