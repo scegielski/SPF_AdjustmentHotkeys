@@ -7,7 +7,7 @@ The current Windows x64 plugin provides tap-to-toggle or held adjustment of left
 right mirrors in American Truck Simulator. It also supports one-key cycling,
 spoken selection cues, and a quiet servo loop routed left/center/right in stereo.
 
-The current version is **0.1.8**, pinned to the inspected ATS **1.61.3.1s**
+The current version is **0.1.9**, pinned to the inspected ATS **1.61.3.1s**
 executable and **SPF 1.2.5**. The Road Trip Ford Mustang was tested in-game.
 Other vehicles and executable builds have not been verified. Slot 4 can represent
 a different mirror in other vehicles. Unknown executables register no hooks.
@@ -21,9 +21,9 @@ unassigned. Updates preserve saved bindings, including deliberately cleared keys
 In SPF Settings, select this plugin and expand **General Settings**:
 
 - **Hold mirror selector**: off uses tap-to-toggle; on adjusts while held.
-- **Mirror voice cues**: announces the mirror when entering or switching.
-- **Mirror servo sound**: motor loop during directional adjustment.
-- **Mirror selection click**: one short click on selection or switching, including cycling.
+- **Mirror voice cues** (off by default): announces the mirror when entering or switching.
+- **Mirror servo sound** (on by default): motor loop during directional adjustment.
+- **Mirror selection click** (on by default): one short click on selection or switching, including cycling.
   It follows left/center/right stereo routing and plays independently of speech. Exiting is silent.
 
 Toggle cycle goes left → center → right → off. Held cycle advances each press and

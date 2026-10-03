@@ -60,7 +60,7 @@ SPF_Hook_Handle* slotHook=nullptr;
 SPF_KeyBinds_Handle* keys=nullptr;
 SPF_Config_Handle* config=nullptr;
 std::atomic<bool> holdSelectors{false};
-bool voiceCuesEnabled=true;
+bool voiceCuesEnabled=false;
 bool servoEnabled=true;
 ServoLoop servo;
 SelectionClick selectionClick;
@@ -362,14 +362,14 @@ bool DefaultBindingNeeded(const nlohmann::json& saved,const char* group,const ch
 void BuildManifest(SPF_Manifest_Builder_Handle* h,const SPF_Manifest_Builder_API* api) {
     const auto saved=ReadSavedSettings(PluginFolder()/"config"/"settings.json");
     api->Info_SetName(h,kName);
-    api->Info_SetVersion(h,"0.1.8");
+    api->Info_SetVersion(h,"0.1.9");
     api->Info_SetMinFrameworkVersion(h,"1.2.5");
     api->Info_SetAuthor(h,"Local mirror diagnostics");
     api->Info_SetDescriptionLiteral(h,"Tap-to-toggle left, center and right mirror controls and movement through SPF.");
     api->Policy_SetAllowUserConfig(h,true);
     api->Policy_AddConfigurableSystem(h,"logging");
     api->Policy_AddConfigurableSystem(h,"settings");
-    api->Settings_SetJson(h,R"json({"hold_selectors":false,"voice_cues":true,"servo_sound":true,"selection_clicks":true})json");
+    api->Settings_SetJson(h,R"json({"hold_selectors":false,"voice_cues":false,"servo_sound":true,"selection_clicks":true})json");
     api->Meta_AddCustomSetting(h,"settings.selection_clicks","Mirror selection click","Play a click when selecting or switching mirrors.","checkbox",nullptr,false);
     api->Meta_AddCustomSetting(h,"settings.servo_sound","Mirror servo sound","Play a quiet motor sound while a mirror is moving.","checkbox",nullptr,false);
     api->Meta_AddCustomSetting(h,"settings.voice_cues","Mirror voice cues","Announce the selected mirror when adjustment starts or switches.","checkbox",nullptr,false);
@@ -444,7 +444,7 @@ void OnUpdate() {
       Log(SPF_LOG_INFO,requestedHold?"MIRRORS: hold selection enabled.":"MIRRORS: tap-to-toggle enabled.");
     }
     if(holdSelectors.load() && movementAllowed.load() && allowed) PollHoldSelection();
-    const bool requestedVoice=!core->config || !config || core->config->Cfg_GetBool(config,"settings.voice_cues",true);
+    const bool requestedVoice=core->config && config && core->config->Cfg_GetBool(config,"settings.voice_cues",false);
     if(!requestedVoice && voiceCuesEnabled) StopVoiceCue();
     voiceCuesEnabled=requestedVoice;
     selectionClicksEnabled=!core->config || !config || core->config->Cfg_GetBool(config,"settings.selection_clicks",true);

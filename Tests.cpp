@@ -17,7 +17,7 @@ void __fastcall StubUpdate(void* context,float dt) { ++calls; passed=context; pa
 template<class T,size_t N> void Put(std::array<unsigned char,N>& bytes,size_t off,T value) { std::memcpy(bytes.data()+off,&value,sizeof(value)); }
 }
 int main() {
- playCueSound=StubCue; cuePaths={L"left.wav",L"center.wav",L"right.wav"};
+ voiceCuesEnabled=true; playCueSound=StubCue; cuePaths={L"left.wav",L"center.wav",L"right.wav"};
  playSelectionClick=StubClick;
  CHECK(CueIndex(0)==0 && CueIndex(4)==1 && CueIndex(2)==2 && CueIndex(-1)==-1);
  UpdateVoiceCue(0); CHECK(cueCalls==1 && lastCue==L"left.wav" && (cueFlags&SND_ASYNC));
