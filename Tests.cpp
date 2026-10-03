@@ -114,6 +114,7 @@ int main(int argc,char** argv) {
  for(int run=0;run<2;++run) { const auto reloaded=ReadSavedSettings(fixture); CHECK(!DefaultBindingNeeded(reloaded,"Select","left")); CHECK(!DefaultBindingNeeded(reloaded,"Select","cycle")); }
  std::filesystem::remove(fixture);
  CHECK(ServoChannelVolume(0)==0x00004000); CHECK(ServoChannelVolume(4)==0x40004000); CHECK(ServoChannelVolume(2)==0x40000000); CHECK(ServoChannelVolume(-1)==0);
+ CHECK(NextServoVolume(0x40004000,-1)==0x40004000); CHECK(NextServoVolume(0x40000000,-1)==0x40000000); CHECK(NextServoVolume(0x40004000,0)==0x00004000);
  CHECK(ServoMovement(0,1,true,true)); CHECK(ServoMovement(4,4,true,true));
  CHECK(!ServoMovement(0,0,true,true)); CHECK(!ServoMovement(-1,1,true,true));
  CHECK(!ServoMovement(0,3,true,true)); CHECK(!ServoMovement(0,12,true,true));

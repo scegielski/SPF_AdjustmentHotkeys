@@ -19,6 +19,11 @@ inline bool ValidServoHeader(const ServoWaveHeader& h) {
   h.byteRate==h.rate*h.align && h.bytes>0 && h.bytes<=1048576 && h.bytes%h.align==0;
 }
 inline DWORD ServoChannelVolume(int slot) { return slot==0?0x00004000:slot==4?0x40004000:slot==2?0x40000000:0; }
+inline DWORD NextServoVolume(DWORD current,int slot) {
+ const auto requested=ServoChannelVolume(slot);
+ // Inactive mode pauses the motor; never mute the output device on exit.
+ return requested?requested:current;
+}
 class ServoLoop {
  HWAVEOUT device=nullptr;
  WAVEHDR header{};
@@ -44,7 +49,7 @@ public:
   return true;
  }
  void SetMirror(int slot) {
-  const auto volume=ServoChannelVolume(slot);
+  const auto volume=NextServoVolume(channelVolume,slot);
   if(volume!=channelVolume) { channelVolume=volume; if(device) waveOutSetVolume(device,volume); }
  }
  void SetPlaying(bool value) {
