@@ -82,7 +82,7 @@ using PlayCueFn=BOOL(WINAPI*)(LPCWSTR,HMODULE,DWORD);
 BOOL WINAPI PlayAdjustmentCue(LPCWSTR path,HMODULE module,DWORD flags) {
  if(path && !cuePaths[4].empty() && cuePaths[4]==path) {
   PlaySoundW(nullptr,nullptr,0);
-  return exitVoice.Play(4,0xffffffffu)?TRUE:FALSE;
+  return exitVoice.Play(4)?TRUE:FALSE;
  }
  exitVoice.Stop();
  return PlaySoundW(path,module,flags);
@@ -394,7 +394,7 @@ bool DefaultBindingNeeded(const nlohmann::json& saved,const char* group,const ch
 void BuildManifest(SPF_Manifest_Builder_Handle* h,const SPF_Manifest_Builder_API* api) {
     const auto saved=ReadSavedSettings(PluginFolder()/"config"/"settings.json");
     api->Info_SetName(h,kName);
-    api->Info_SetVersion(h,"0.2.6");
+    api->Info_SetVersion(h,"0.2.7");
     api->Info_SetMinFrameworkVersion(h,"1.2.5");
     api->Info_SetAuthor(h,"SPF Adjustment Hotkeys");
     api->Info_SetDescriptionLiteral(h,"Live mirror and native VR seat adjustment through SPF hotkeys.");

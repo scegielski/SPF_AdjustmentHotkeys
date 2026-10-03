@@ -7,7 +7,7 @@ The current Windows x64 plugin provides tap-to-toggle or held adjustment of left
 right mirrors in American Truck Simulator. It also supports one-key cycling,
 spoken selection cues, and a quiet servo loop routed left/center/right in stereo.
 
-The current version is **0.2.6**, pinned to the inspected ATS **1.61.3.1s**
+The current version is **0.2.7**, pinned to the inspected ATS **1.61.3.1s**
 executable and **SPF 1.2.5**. The Road Trip Ford Mustang was tested in-game.
 Other vehicles and executable builds have not been verified. Slot 4 can represent
 a different mirror in other vehicles. Unknown executables register no hooks.
@@ -113,3 +113,5 @@ Exit speech now uses a dedicated Windows audio stream.
 Exit voice clip uses 44.1 kHz PCM, matching the dedicated stream loader.
 
 Leaving adjustment pauses the servo without muting the audio output device.
+
+Exit speech uses the same 25-percent centered output level as the selection audio.
