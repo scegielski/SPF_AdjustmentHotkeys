@@ -9,6 +9,9 @@ EXTERN gResetOriginal:QWORD
 
 EXTERN gSelectOriginal:QWORD
 EXTERN gSlotOriginal:QWORD
+EXTERN gSyntheticSeatContext:QWORD
+EXTERN gSeatUiOriginal:QWORD
+EXTERN gSeatApplyReturn:QWORD
 .code
 ; At the selector fragment, RSI is context and CL is near-selection result.
 ; Force the near branch only during our scoped call for the same context.
@@ -99,4 +102,17 @@ Reset_pass:
     popfq
     jmp qword ptr [gResetOriginal]
 ResetInputStub ENDP
+; RDI is the native seat menu object. Bypass only the UI tail for our private object.
+SeatUiStub PROC
+ pushfq
+ cmp rdi, qword ptr [gSyntheticSeatContext]
+ jne seat_ui_pass
+ test rdi,rdi
+ jz seat_ui_pass
+ popfq
+ jmp qword ptr [gSeatApplyReturn]
+seat_ui_pass:
+ popfq
+ jmp qword ptr [gSeatUiOriginal]
+SeatUiStub ENDP
 END

@@ -73,4 +73,27 @@ RunInputStubs PROC FRAME
  pop rsi
  ret
 RunInputStubs ENDP
+EXTERN SeatUiStub:PROC
+TestSeatUiPass PROC
+ mov eax,11
+ ret
+TestSeatUiPass ENDP
+TestSeatUiBypass PROC
+ mov eax,22
+ ret
+TestSeatUiBypass ENDP
+RunSeatUiStub PROC FRAME
+ push rdi
+ .pushreg rdi
+ sub rsp,32
+ .allocstack 32
+ .endprolog
+ mov rdi,rcx
+ stc
+ call SeatUiStub
+ setc byte ptr [rdx]
+ add rsp,32
+ pop rdi
+ ret
+RunSeatUiStub ENDP
 END

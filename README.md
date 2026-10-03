@@ -7,7 +7,7 @@ The current Windows x64 plugin provides tap-to-toggle or held adjustment of left
 right mirrors in American Truck Simulator. It also supports one-key cycling,
 spoken selection cues, and a quiet servo loop routed left/center/right in stereo.
 
-The current version is **0.1.9**, pinned to the inspected ATS **1.61.3.1s**
+The current version is **0.2.0**, pinned to the inspected ATS **1.61.3.1s**
 executable and **SPF 1.2.5**. The Road Trip Ford Mustang was tested in-game.
 Other vehicles and executable builds have not been verified. Slot 4 can represent
 a different mirror in other vehicles. Unknown executables register no hooks.
@@ -20,10 +20,10 @@ unassigned. Updates preserve saved bindings, including deliberately cleared keys
 
 In SPF Settings, select this plugin and expand **General Settings**:
 
-- **Hold mirror selector**: off uses tap-to-toggle; on adjusts while held.
-- **Mirror voice cues** (off by default): announces the mirror when entering or switching.
-- **Mirror servo sound** (on by default): motor loop during directional adjustment.
-- **Mirror selection click** (on by default): one short click on selection or switching, including cycling.
+- **Hold adjustment selector**: off uses tap-to-toggle; on adjusts while held.
+- **Adjustment voice cues** (off by default): announces the mirror when entering or switching.
+- **Adjustment servo sound** (on by default): motor loop during directional adjustment.
+- **Adjustment selection click** (on by default): one short click on selection or switching, including cycling.
   It follows left/center/right stereo routing and plays independently of speech. Exiting is silent.
 
 Toggle cycle goes left → center → right → off. Held cycle advances each press and
@@ -31,6 +31,29 @@ releases to exit. Pause, focus loss and world unload exit adjustment.
 Servo audio is left-only for the left mirror, both channels for center, right-only
 for right. It is stereo routing rather than world-positioned VR audio. Windows
 default audio output is used separately from the game's FMOD mixer.
+
+## Native VR seat prototype
+
+Seat mode adds up/down and forward/back using the existing movement assignments:
+W/S up/down and A/D forward/back by default. Select seat directly (unassigned
+by default) or cycle after the right mirror. Hold/toggle behavior is shared.
+Seat servo and click use both channels; the optional spoken cue says "Seat adjust".
+Voice remains off by default, servo and click remain on.
+
+For this prototype, after each vehicle/world load, open F4 seat adjustment and
+make one small adjustment to capture that vehicle's native defaults and limits.
+Then close F4 and select/cycle to seat. Uncalibrated seat mode is skipped by cycle.
+Pause/focus loss exits adjustment. World unload clears calibration, and changing
+vehicle settings identity prevents reuse of another vehicle's captured defaults.
+The existing reset binding restores vertical/depth defaults in seat mode.
+Lateral position, tilt, rotation and FOV are outside this prototype's controls.
+
+This calls the game's native seat apply routine using private menu values;
+native camera/vehicle writes and refresh execute normally. A scoped assembly
+hook bypasses only the UI tail for that private object. Live F4 diagnostics
+confirmed changes in vehicle settings; hotkey movement and persistence across
+save/reload still need in-game VR validation. Disable Seat Diagnostics first,
+because its hook overlaps the integrated seat observer.
 
 ## Build and test
 
@@ -64,7 +87,7 @@ once. Exact executable hash and unique instruction signatures gate registration.
 Regression tests exercise the real assembly stubs, slot/input/flags guards,
 hold/cycle transitions, persisted assigned and empty binding lists, speech cue
 selection/mute, servo movement cancellation and stereo channel routing.
-The user confirmed movement, center selection, persistence and stereo servo
+The user confirmed mirror movement, center selection, persistence, stereo click and servo
 playback in-game. Broader vehicle/game-version compatibility remains untested.
 
 ## Third-party material

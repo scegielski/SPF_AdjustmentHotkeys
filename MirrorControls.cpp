@@ -38,6 +38,10 @@ void DownInputStub();
 void* gResetOriginal=nullptr;
 void ResetInputStub();
 
+uintptr_t gSyntheticSeatContext=0;
+void* gSeatUiOriginal=nullptr;
+void* gSeatApplyReturn=nullptr;
+void SeatUiStub();
 void* gSelectOriginal=nullptr;
 void* gSlotOriginal=nullptr;
 void CenterSelectStub();
@@ -65,12 +69,12 @@ bool servoEnabled=true;
 ServoLoop servo;
 SelectionClick selectionClick;
 bool selectionClicksEnabled=true;
-void PlaySelectionClick(int slot) { selectionClick.Play(slot); }
+void PlaySelectionClick(int slot) { selectionClick.Play(slot==6?4:slot); }
 void (*playSelectionClick)(int)=PlaySelectionClick;
 std::filesystem::path PluginFolder();
 int announcedSlot=-1;
 bool cuePlaying=false;
-std::array<std::wstring,3> cuePaths{};
+std::array<std::wstring,4> cuePaths{};
 using PlayCueFn=BOOL(WINAPI*)(LPCWSTR,HMODULE,DWORD);
 PlayCueFn playCueSound=PlaySoundW;
 unsigned char previousHeld=0;
@@ -83,6 +87,11 @@ std::array<SPF_Hook_Handle*,5> inputHooks{};
 std::atomic<bool> movementAllowed{false};
 std::mutex updateMutex;
 void Log(SPF_LogLevel,const char*);
+bool SeatReady();
+void ClearSeatCalibration();
+void MoveNativeSeat(float dt,unsigned char mask);
+void RegisterSeatHooks();
+void ToggleSeat();
 bool HooksReady() {
  if (!core || !core->hooks || !updateHook || !rotationHook || !selectHook || !slotHook) return false;
  for(auto h:inputHooks) if(!h || !core->hooks->Hook_IsInstalled(h) || !core->hooks->Hook_IsEnabled(h)) return false;
@@ -90,7 +99,7 @@ bool HooksReady() {
   if (!core->hooks->Hook_IsInstalled(h) || !core->hooks->Hook_IsEnabled(h)) return false;
  return true;
 }
-int CueIndex(int slot) { return slot==0?0:slot==4?1:slot==2?2:-1; }
+int CueIndex(int slot) { return slot==0?0:slot==4?1:slot==2?2:slot==6?3:-1; }
 void InitializeCuePaths() {
  HMODULE module=nullptr;
  if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -98,8 +107,8 @@ void InitializeCuePaths() {
  wchar_t path[32768]{};
  if(!GetModuleFileNameW(module,path,32768)) return;
  const auto folder=std::filesystem::path(path).parent_path()/L"sounds";
- const wchar_t* names[]={L"left.wav",L"center.wav",L"right.wav"};
- for(size_t i=0;i<3;++i) cuePaths[i]=(folder/names[i]).wstring();
+ const wchar_t* names[]={L"left.wav",L"center.wav",L"right.wav",L"seat.wav"};
+ for(size_t i=0;i<4;++i) cuePaths[i]=(folder/names[i]).wstring();
 }
 void UpdateVoiceCue(int slot) {
  if(slot==announcedSlot) return;
@@ -124,34 +133,37 @@ int NextSelection(int current,int requested) { return current==requested?-1:requ
 void ToggleSlot(int slot) {
  if(holdSelectors.load()) return;
  if(selectedSlot.load()==slot) { ExitCenter(); return; }
+ if(slot==6 && !SeatReady()) { Log(SPF_LOG_WARN,"SEAT: first adjust the seat once in F4 for this vehicle to capture native limits."); return; }
  if(!movementAllowed.load() || !HooksReady()) { Log(SPF_LOG_WARN,"MIRRORS: unavailable until driving context and hooks are ready."); return; }
  selectedSlot.store(slot); inputMask.store(0); SetMovementBlocking(true);
- Log(SPF_LOG_INFO,slot==0?"MIRRORS: left on.":slot==2?"MIRRORS: right on.":"MIRRORS: center on.");
+ Log(SPF_LOG_INFO,slot==0?"MIRRORS: left on.":slot==2?"MIRRORS: right on.":slot==6?"SEAT: on.":"MIRRORS: center on.");
 }
 int ResolveHeldSelection(int current,unsigned char held,unsigned char previous) {
- const int slots[]={0,2,4};
+ const int slots[]={0,2,4,6};
  int target=current;
  // Newly pressed selector wins; simultaneous new presses use center/right/left priority.
  const auto pressed=static_cast<unsigned char>(held & ~previous);
- for(int i=0;i<3;++i) if(pressed & (1u<<i)) target=slots[i];
- for(int i=0;i<3;++i) if(target==slots[i] && (held & (1u<<i))) return target;
- for(int i=2;i>=0;--i) if(held & (1u<<i)) return slots[i];
+ for(int i=0;i<4;++i) if(pressed & (1u<<i)) target=slots[i];
+ for(int i=0;i<4;++i) if(target==slots[i] && (held & (1u<<i))) return target;
+ for(int i=3;i>=0;--i) if(held & (1u<<i)) return slots[i];
  return -1;
 }
 int NextCycleSlot(int current,bool hold) {
  if(current==0) return 4;
  if(current==4) return 2;
- if(current==2) return hold?0:-1;
+ if(current==2) return 6;
+ if(current==6) return hold?0:-1;
  return 0;
 }
 void CycleMirror() {
  if(!movementAllowed.load() || !HooksReady()) return;
  const bool hold=holdSelectors.load();
- const int next=NextCycleSlot(hold?lastCycleSlot:selectedSlot.load(),hold);
+ int next=NextCycleSlot(hold?lastCycleSlot:selectedSlot.load(),hold);
+ if(next==6 && !SeatReady()) { Log(SPF_LOG_WARN,"SEAT: not calibrated; skipping seat. Adjust once in F4 to capture this vehicle."); next=hold?0:-1; }
  if(next<0) { ExitCenter(); return; }
  if(hold) { lastCycleSlot=next; heldCycleSlot=next; }
  selectedSlot.store(next); inputMask.store(0); SetMovementBlocking(true);
- Log(SPF_LOG_INFO,next==0?"MIRRORS: cycled to left.":next==4?"MIRRORS: cycled to center.":"MIRRORS: cycled to right.");
+ Log(SPF_LOG_INFO,next==0?"MIRRORS: cycled to left.":next==4?"MIRRORS: cycled to center.":next==6?"SEAT: cycled to seat.":"MIRRORS: cycled to right.");
 }
 int ResolveHeldWithCycle(int current,unsigned char held,unsigned char previous,bool cycleHeld,int cycleSlot) {
  if((held & ~previous)!=0) return ResolveHeldSelection(current,held,previous);
@@ -160,23 +172,25 @@ int ResolveHeldWithCycle(int current,unsigned char held,unsigned char previous,b
 }
 void PollHoldSelection() {
  unsigned char held=0;
- const char* actions[]={"Select.left","Select.right","Select.center"};
- for(int i=0;i<3;++i) if(core->keybinds->Kbind_GetActionValue(keys,actions[i])>0.5f) held|=static_cast<unsigned char>(1u<<i);
+ const char* actions[]={"Select.left","Select.right","Select.center","Select.seat"};
+ for(int i=0;i<4;++i) if(core->keybinds->Kbind_GetActionValue(keys,actions[i])>0.5f) held|=static_cast<unsigned char>(1u<<i);
  const int current=selectedSlot.load();
  const bool cycleHeld=core->keybinds->Kbind_GetActionValue(keys,"Select.cycle")>0.5f;
  const int next=ResolveHeldWithCycle(current,held,previousHeld,cycleHeld,heldCycleSlot);
  previousHeld=held;
  if(next==current) return;
+ if(next==6 && !SeatReady()) { Log(SPF_LOG_WARN,"SEAT: adjust once in F4 to capture this vehicle before selecting seat mode."); return; }
  if(next<0) { ExitCenter(); return; }
  selectedSlot.store(next); inputMask.store(0); SetMovementBlocking(true);
- Log(SPF_LOG_INFO,next==0?"MIRRORS: left held.":next==2?"MIRRORS: right held.":"MIRRORS: center held.");
+ Log(SPF_LOG_INFO,next==0?"MIRRORS: left held.":next==2?"MIRRORS: right held.":next==6?"SEAT: held.":"MIRRORS: center held.");
 }
 void ToggleLeft() { ToggleSlot(0); }
 void ToggleRight() { ToggleSlot(2); }
 void ToggleCenter() { ToggleSlot(4); }
+void ToggleSeat() { ToggleSlot(6); }
 void NoAction() {}
 void MapContext(uintptr_t) noexcept;
-void WorldReset() { ExitCenter(); movementAllowed.store(false); currentContext.store(0); previousHeld=0; heldCycleSlot=-1; lastCycleSlot=-1; MapContext(0); }
+void WorldReset() { ClearSeatCalibration(); ExitCenter(); movementAllowed.store(false); currentContext.store(0); previousHeld=0; heldCycleSlot=-1; lastCycleSlot=-1; MapContext(0); }
 
 std::atomic<bool> observing{false};
 std::atomic<uint64_t> contextCalls{0};
@@ -264,7 +278,7 @@ void CaptureSnapshot() noexcept {
     state.hasSnapshot=true;
 }
 bool CanOverride(uintptr_t context,int slot) {
- if (slot<0 || !movementAllowed.load()) return false;
+ if (slot<0 || slot==6 || !movementAllowed.load()) return false;
  std::lock_guard lock(state.mutex);
  return context && state.entries && static_cast<uint64_t>(slot)<state.count && state.count<=9;
 }
@@ -282,6 +296,7 @@ void DetourUpdate(void* context,float dt) {
  else gOverrideContext=0;
  originalUpdate(context,dt); // Exactly one call; native getter, setter and camera refresh.
  gOverrideContext=0; gInputMask=0;
+ if(slot==6 && movementAllowed.load()) MoveNativeSeat(dt,inputMask.load());
 }
 void DetourSetRotation(void* object, const float* angles) {
     int slot=-1; uint64_t generation=0;
@@ -359,27 +374,29 @@ bool DefaultBindingNeeded(const nlohmann::json& saved,const char* group,const ch
  // An explicitly empty list is a saved choice, rather than a missing default.
  return !value.contains("bindings") || !value["bindings"].is_array();
 }
+#include "NativeSeat.inc"
 void BuildManifest(SPF_Manifest_Builder_Handle* h,const SPF_Manifest_Builder_API* api) {
     const auto saved=ReadSavedSettings(PluginFolder()/"config"/"settings.json");
     api->Info_SetName(h,kName);
-    api->Info_SetVersion(h,"0.1.9");
+    api->Info_SetVersion(h,"0.2.0");
     api->Info_SetMinFrameworkVersion(h,"1.2.5");
-    api->Info_SetAuthor(h,"Local mirror diagnostics");
-    api->Info_SetDescriptionLiteral(h,"Tap-to-toggle left, center and right mirror controls and movement through SPF.");
+    api->Info_SetAuthor(h,"SPF Adjustment Hotkeys");
+    api->Info_SetDescriptionLiteral(h,"Live mirror and native VR seat adjustment through SPF hotkeys.");
     api->Policy_SetAllowUserConfig(h,true);
     api->Policy_AddConfigurableSystem(h,"logging");
     api->Policy_AddConfigurableSystem(h,"settings");
     api->Settings_SetJson(h,R"json({"hold_selectors":false,"voice_cues":false,"servo_sound":true,"selection_clicks":true})json");
-    api->Meta_AddCustomSetting(h,"settings.selection_clicks","Mirror selection click","Play a click when selecting or switching mirrors.","checkbox",nullptr,false);
-    api->Meta_AddCustomSetting(h,"settings.servo_sound","Mirror servo sound","Play a quiet motor sound while a mirror is moving.","checkbox",nullptr,false);
-    api->Meta_AddCustomSetting(h,"settings.voice_cues","Mirror voice cues","Announce the selected mirror when adjustment starts or switches.","checkbox",nullptr,false);
-    api->Meta_AddCustomSetting(h,"settings.hold_selectors","Hold mirror selector","Off: tap to toggle. On: hold selector while adjusting; release to exit.","checkbox",nullptr,false);
+    api->Meta_AddCustomSetting(h,"settings.selection_clicks","Adjustment selection click","Play a click when selecting mirrors or seat.","checkbox",nullptr,false);
+    api->Meta_AddCustomSetting(h,"settings.servo_sound","Adjustment servo sound","Play a quiet motor sound while a mirror or seat is moving.","checkbox",nullptr,false);
+    api->Meta_AddCustomSetting(h,"settings.voice_cues","Adjustment voice cues","Announce the selected mirror or seat when adjustment starts or switches.","checkbox",nullptr,false);
+    api->Meta_AddCustomSetting(h,"settings.hold_selectors","Hold adjustment selector","Off: tap to toggle. On: hold selector while adjusting; release to exit.","checkbox",nullptr,false);
     api->Defaults_SetLogging(h,"info",true);
     if(DefaultBindingNeeded(saved,"Move","left")) api->Defaults_AddKeybind(h,"Move","left","keyboard","KEY_A","manual");
     if(DefaultBindingNeeded(saved,"Move","right")) api->Defaults_AddKeybind(h,"Move","right","keyboard","KEY_D","manual");
     if(DefaultBindingNeeded(saved,"Move","up")) api->Defaults_AddKeybind(h,"Move","up","keyboard","KEY_W","manual");
     if(DefaultBindingNeeded(saved,"Move","down")) api->Defaults_AddKeybind(h,"Move","down","keyboard","KEY_S","manual");
-    api->Meta_AddKeybind(h,"Select","cycle","Cycle mirrors","Toggle: left, center, right, off. Hold: each press advances; release exits.");
+    api->Meta_AddKeybind(h,"Select","seat","Select seat","Toggle or hold; W/S up/down, A/D forward/back using current movement assignments.");
+    api->Meta_AddKeybind(h,"Select","cycle","Cycle mirrors and seat","Toggle: left, center, right, seat, off. Hold: each press advances; release exits.");
     api->Meta_AddKeybind(h,"Select","left","Toggle left mirror","Tap on/off, or switch from another mirror.");
     api->Meta_AddKeybind(h,"Select","right","Toggle right mirror","Tap on/off, or switch from another mirror.");
     api->Meta_AddKeybind(h,"Select","center","Toggle center mirror","Tap on/off, or switch from another mirror.");
@@ -399,7 +416,9 @@ void OnActivated(const SPF_Core_API* api) {
       core->keybinds->Kbind_RegisterActionMetadata(keys,"Select.left","Select left mirror","Toggle or hold to adjust the left mirror.",nullptr,nullptr);
       core->keybinds->Kbind_RegisterActionMetadata(keys,"Select.right","Select right mirror","Toggle or hold to adjust the right mirror.",nullptr,nullptr);
       core->keybinds->Kbind_RegisterActionMetadata(keys,"Select.center","Select center mirror","Toggle or hold to adjust the center mirror.",nullptr,nullptr);
-      core->keybinds->Kbind_RegisterActionMetadata(keys,"Select.cycle","Cycle mirrors","Select each mirror with one binding.",nullptr,nullptr);
+      core->keybinds->Kbind_RegisterActionMetadata(keys,"Select.seat","Select seat","Adjust native seat up/down and forward/back.",nullptr,nullptr);
+      core->keybinds->Kbind_Register(keys,"Select.seat",ToggleSeat);
+      core->keybinds->Kbind_RegisterActionMetadata(keys,"Select.cycle","Cycle mirrors and seat","Cycle left, center, right, seat, then off; hold mode wraps to left.",nullptr,nullptr);
       core->keybinds->Kbind_RegisterActionMetadata(keys,"Move.reset","Reset selected mirror","Reset the mirror currently being adjusted.",nullptr,nullptr);
       core->keybinds->Kbind_Register(keys,"Select.left",ToggleLeft);
       core->keybinds->Kbind_Register(keys,"Select.right",ToggleRight);
@@ -419,6 +438,7 @@ void OnActivated(const SPF_Core_API* api) {
     }
     if(!servo.Open(PluginFolder()/"sounds"/"servo.wav")) Log(SPF_LOG_WARN,"MIRRORS: servo sound unavailable; check sounds/servo.wav and Windows audio output.");
     if(!selectionClick.Open(PluginFolder()/"sounds"/"click.wav")) Log(SPF_LOG_WARN,"MIRRORS: selection click unavailable; check sounds/click.wav and Windows audio output.");
+    RegisterSeatHooks();
     observing.store(true);
     updateHook=hooks->Hook_Register(kName,"MirrorContext","Observe mirror context",reinterpret_cast<void*>(DetourUpdate),reinterpret_cast<void**>(&originalUpdate),kUpdatePattern,true);
     rotationHook=hooks->Hook_Register(kName,"MirrorRotation","Observe mirror rotation",reinterpret_cast<void*>(DetourSetRotation),reinterpret_cast<void**>(&originalSetRotation),kSetRotationPattern,true);
@@ -448,6 +468,7 @@ void OnUpdate() {
     if(!requestedVoice && voiceCuesEnabled) StopVoiceCue();
     voiceCuesEnabled=requestedVoice;
     selectionClicksEnabled=!core->config || !config || core->config->Cfg_GetBool(config,"settings.selection_clicks",true);
+    if(selectedSlot.load()==6 && !SeatReady()) ExitCenter();
     UpdateVoiceCue(selectedSlot.load());
     unsigned char mask=0;
     if(selectedSlot.load()>=0 && movementAllowed.load()) {
@@ -455,7 +476,7 @@ void OnUpdate() {
     }
     inputMask.store(mask);
     servoEnabled=!core->config || !config || core->config->Cfg_GetBool(config,"settings.servo_sound",true);
-    servo.SetMirror(selectedSlot.load());
+    servo.SetMirror(selectedSlot.load()==6?4:selectedSlot.load());
     servo.SetPlaying(ServoMovement(selectedSlot.load(),mask,servoEnabled,movementAllowed.load()));
     static bool reported=false;
     if (!reported && HooksReady()) {
@@ -488,7 +509,7 @@ void OnUpdate() {
 void OnUnload() {
     StopVoiceCue(); servo.Close(); selectionClick.Close();
     // SPF removes hook objects after OnUnload. Preserve trampolines until then.
-    ExitCenter(); movementAllowed.store(false);
+    ClearSeatCalibration(); ExitCenter(); movementAllowed.store(false);
     observing.store(false);
     currentContext.store(0);
 }

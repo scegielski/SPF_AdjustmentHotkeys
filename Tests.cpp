@@ -16,8 +16,27 @@ int calls=0; void* passed=nullptr; float passedDt=0; uintptr_t scoped=0;
 void __fastcall StubUpdate(void* context,float dt) { ++calls; passed=context; passedDt=dt; scoped=gOverrideContext; }
 template<class T,size_t N> void Put(std::array<unsigned char,N>& bytes,size_t off,T value) { std::memcpy(bytes.data()+off,&value,sizeof(value)); }
 }
+extern "C" int RunSeatUiStub(uintptr_t,unsigned char*);
+extern "C" void TestSeatUiPass();
+extern "C" void TestSeatUiBypass();
 int main() {
- voiceCuesEnabled=true; playCueSound=StubCue; cuePaths={L"left.wav",L"center.wav",L"right.wav"};
+ std::array<unsigned char,0x400> seat{};
+ for(size_t axis=0;axis<3;++axis) { SeatPut(seat,0x384+axis*4,-0.1f); SeatPut(seat,0x390+axis*4,0.1f); SeatPut(seat,0x39c+axis*4,0.f); }
+ std::array<float,8> seatCurrent={0.02f,0.01f,-0.01f,1.f,2.f,3.f,4.f,5.f};
+ CHECK(PrepareSeatValues(seat,seatCurrent,0.1f,4));
+ CHECK(std::abs(SeatFloat(seat,0x37c)-0.02f)<0.00001f && SeatFloat(seat,0x378)==0.02f);
+ CHECK(SeatFloat(seat,0x3c8)==1.f && SeatFloat(seat,0x3d8)==2.f && SeatFloat(seat,0x3e8)==3.f && SeatFloat(seat,0x3a8)==4.f && SeatFloat(seat,0x3b8)==5.f);
+ CHECK(PrepareSeatValues(seat,seatCurrent,0.1f,1)); CHECK(std::abs(SeatFloat(seat,0x380)+0.02f)<0.00001f);
+ seatCurrent[1]=0.1f; CHECK(PrepareSeatValues(seat,seatCurrent,0.1f,4)); CHECK(SeatFloat(seat,0x37c)==0.1f);
+ CHECK(!PrepareSeatValues(seat,seatCurrent,0.2f,4)); CHECK(!PrepareSeatValues(seat,seatCurrent,0.1f,12));
+ CHECK(PrepareSeatValues(seat,seatCurrent,0.1f,16)); CHECK(SeatFloat(seat,0x37c)==0 && SeatFloat(seat,0x380)==0 && SeatFloat(seat,0x378)==0.02f);
+ gSeatUiOriginal=reinterpret_cast<void*>(TestSeatUiPass); gSeatApplyReturn=reinterpret_cast<void*>(TestSeatUiBypass);
+ unsigned char carry=0; gSyntheticSeatContext=123;
+ CHECK(RunSeatUiStub(123,&carry)==22 && carry==1);
+ CHECK(RunSeatUiStub(124,&carry)==11 && carry==1);
+ gSyntheticSeatContext=0; CHECK(RunSeatUiStub(0,&carry)==11 && carry==1);
+
+ voiceCuesEnabled=true; playCueSound=StubCue; cuePaths={L"left.wav",L"center.wav",L"right.wav",L"seat.wav"};
  playSelectionClick=StubClick;
  CHECK(CueIndex(0)==0 && CueIndex(4)==1 && CueIndex(2)==2 && CueIndex(-1)==-1);
  UpdateVoiceCue(0); CHECK(cueCalls==1 && lastCue==L"left.wav" && (cueFlags&SND_ASYNC));
@@ -35,6 +54,8 @@ int main() {
  UpdateVoiceCue(-1); CHECK(clickCalls==7); // Cycling to off is silent.
  selectionClicksEnabled=false; UpdateVoiceCue(0); CHECK(clickCalls==7 && cueCalls==8);
  selectionClicksEnabled=true;
+ UpdateVoiceCue(6); CHECK(lastCue==L"seat.wav" && lastClickSlot==6);
+ CHECK(ResolveHeldSelection(-1,8,0)==6); CHECK(ResolveHeldSelection(6,0,8)==-1);
  const auto saved=nlohmann::json::parse(R"json({"keybinds":{"SPF_MirrorControls.Select":{"left":{"bindings":[]},"cycle":{"bindings":[{"key":"KEY_1","type":"keyboard"}]}}}})json");
  CHECK(!DefaultBindingNeeded(saved,"Select","left"));
  CHECK(!DefaultBindingNeeded(saved,"Select","cycle"));
@@ -84,8 +105,8 @@ int main() {
  CHECK(ResolveHeldSelection(-1,4,0)==4);
  CHECK(ResolveHeldSelection(-1,7,0)==4);
  CHECK(ResolveHeldSelection(4,0,4)==-1);
- CHECK(NextCycleSlot(-1,false)==0); CHECK(NextCycleSlot(0,false)==4); CHECK(NextCycleSlot(4,false)==2); CHECK(NextCycleSlot(2,false)==-1);
- CHECK(NextCycleSlot(-1,true)==0); CHECK(NextCycleSlot(0,true)==4); CHECK(NextCycleSlot(4,true)==2); CHECK(NextCycleSlot(2,true)==0);
+ CHECK(NextCycleSlot(-1,false)==0); CHECK(NextCycleSlot(0,false)==4); CHECK(NextCycleSlot(4,false)==2); CHECK(NextCycleSlot(2,false)==6); CHECK(NextCycleSlot(6,false)==-1);
+ CHECK(NextCycleSlot(-1,true)==0); CHECK(NextCycleSlot(0,true)==4); CHECK(NextCycleSlot(4,true)==2); CHECK(NextCycleSlot(2,true)==6); CHECK(NextCycleSlot(6,true)==0);
  CHECK(ResolveHeldWithCycle(4,0,0,true,4)==4);
  CHECK(ResolveHeldWithCycle(4,0,0,false,4)==-1);
  CHECK(ResolveHeldWithCycle(4,1,0,true,4)==0);
