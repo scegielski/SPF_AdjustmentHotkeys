@@ -90,6 +90,10 @@ int main() {
  selectionClicksEnabled=true;
  UpdateVoiceCue(6); CHECK(lastCue==L"seat.wav" && lastClickSlot==6);
  UpdateVoiceCue(-1); CHECK(lastCue==L"off.wav" && lastClickSlot==-1);
+ // Exit feedback is emitted synchronously even without another OnUpdate tick.
+ UpdateVoiceCue(6); selectedSlot=6; const int beforeExit=cueCalls;
+ ExitCenter(); CHECK(selectedSlot==-1 && cueCalls==beforeExit+1 && lastCue==L"off.wav" && lastClickSlot==-1);
+ ExitCenter(); UpdateVoiceCue(-1); CHECK(cueCalls==beforeExit+1);
  CHECK(ResolveHeldSelection(-1,8,0)==6); CHECK(ResolveHeldSelection(6,0,8)==-1);
  const auto saved=nlohmann::json::parse(R"json({"keybinds":{"SPF_MirrorControls.Select":{"left":{"bindings":[]},"cycle":{"bindings":[{"key":"KEY_1","type":"keyboard"}]}}}})json");
  CHECK(!DefaultBindingNeeded(saved,"Select","left"));

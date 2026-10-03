@@ -119,7 +119,7 @@ void UpdateVoiceCue(int slot) {
  if(selectionClicksEnabled && index>=0) playSelectionClick(slot);
  if(!voiceCuesEnabled || index<0 || cuePaths[index].empty()) return;
  // Asynchronous playback interrupts the old cue instead of building a queue.
- if(playCueSound(cuePaths[index].c_str(),nullptr,SND_FILENAME|SND_ASYNC|SND_NODEFAULT)) cuePlaying=true;
+ if(playCueSound(cuePaths[index].c_str(),nullptr,SND_FILENAME|SND_ASYNC|SND_NODEFAULT)) { cuePlaying=true; if(exiting) Log(SPF_LOG_INFO,"AUDIO: Adjustment off voice playback accepted."); }
  else Log(SPF_LOG_WARN,"MIRRORS: voice cue could not play; check the sounds folder.");
 }
 void StopVoiceCue() { if(cuePlaying) { playCueSound(nullptr,nullptr,0); cuePlaying=false; } }
@@ -128,7 +128,11 @@ void SetMovementBlocking(bool block) {
  if(core && core->keybinds && keys) for(const auto* action:movementActions) core->keybinds->Kbind_SetBlockState(keys,action,block);
 }
 void ExitCenter() {
- if(selectedSlot.exchange(-1)>=0) Log(SPF_LOG_INFO,"MIRRORS: mode off.");
+ if(selectedSlot.exchange(-1)>=0) {
+  Log(SPF_LOG_INFO,"MIRRORS: mode off.");
+  // Deliver exit feedback at the actual transition, before a later input/frame.
+  UpdateVoiceCue(-1);
+ }
  inputMask.store(0); servo.SetPlaying(false); SetMovementBlocking(false);
 }
 int NextSelection(int current,int requested) { return current==requested?-1:requested; }
@@ -380,7 +384,7 @@ bool DefaultBindingNeeded(const nlohmann::json& saved,const char* group,const ch
 void BuildManifest(SPF_Manifest_Builder_Handle* h,const SPF_Manifest_Builder_API* api) {
     const auto saved=ReadSavedSettings(PluginFolder()/"config"/"settings.json");
     api->Info_SetName(h,kName);
-    api->Info_SetVersion(h,"0.2.2");
+    api->Info_SetVersion(h,"0.2.3");
     api->Info_SetMinFrameworkVersion(h,"1.2.5");
     api->Info_SetAuthor(h,"SPF Adjustment Hotkeys");
     api->Info_SetDescriptionLiteral(h,"Live mirror and native VR seat adjustment through SPF hotkeys.");
