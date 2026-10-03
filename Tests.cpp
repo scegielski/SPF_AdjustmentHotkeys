@@ -9,6 +9,8 @@ extern "C" void RunInputStubs(uintptr_t,void*);
 extern "C" void TestSlotReturn();
 namespace {
 int cueCalls=0; std::wstring lastCue; DWORD cueFlags=0;
+int clickCalls=0; int lastClickSlot=-1;
+void StubClick(int slot) { ++clickCalls; lastClickSlot=slot; }
 BOOL WINAPI StubCue(LPCWSTR path,HMODULE,DWORD flags) { ++cueCalls; lastCue=path?path:L""; cueFlags=flags; return TRUE; }
 int calls=0; void* passed=nullptr; float passedDt=0; uintptr_t scoped=0;
 void __fastcall StubUpdate(void* context,float dt) { ++calls; passed=context; passedDt=dt; scoped=gOverrideContext; }
@@ -16,6 +18,7 @@ template<class T,size_t N> void Put(std::array<unsigned char,N>& bytes,size_t of
 }
 int main() {
  playCueSound=StubCue; cuePaths={L"left.wav",L"center.wav",L"right.wav"};
+ playSelectionClick=StubClick;
  CHECK(CueIndex(0)==0 && CueIndex(4)==1 && CueIndex(2)==2 && CueIndex(-1)==-1);
  UpdateVoiceCue(0); CHECK(cueCalls==1 && lastCue==L"left.wav" && (cueFlags&SND_ASYNC));
  UpdateVoiceCue(0); CHECK(cueCalls==1);
@@ -25,6 +28,13 @@ int main() {
  voiceCuesEnabled=false; UpdateVoiceCue(0); CHECK(cueCalls==3);
  StopVoiceCue(); CHECK(cueCalls==4 && lastCue.empty());
  voiceCuesEnabled=true; UpdateVoiceCue(-1); UpdateVoiceCue(0); CHECK(cueCalls==5);
+ CHECK(clickCalls==5 && lastClickSlot==0); // Includes selection with speech muted.
+ UpdateVoiceCue(0); CHECK(clickCalls==5); // Held selection cannot repeat.
+ UpdateVoiceCue(4); CHECK(clickCalls==6 && lastClickSlot==4);
+ UpdateVoiceCue(2); CHECK(clickCalls==7 && lastClickSlot==2);
+ UpdateVoiceCue(-1); CHECK(clickCalls==7); // Cycling to off is silent.
+ selectionClicksEnabled=false; UpdateVoiceCue(0); CHECK(clickCalls==7 && cueCalls==8);
+ selectionClicksEnabled=true;
  const auto saved=nlohmann::json::parse(R"json({"keybinds":{"SPF_MirrorControls.Select":{"left":{"bindings":[]},"cycle":{"bindings":[{"key":"KEY_1","type":"keyboard"}]}}}})json");
  CHECK(!DefaultBindingNeeded(saved,"Select","left"));
  CHECK(!DefaultBindingNeeded(saved,"Select","cycle"));

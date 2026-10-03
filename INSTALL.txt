@@ -1,4 +1,4 @@
-SPF Mirror Controls 0.1.7 -- stereo servo cues
+SPF Mirror Controls 0.1.8 -- stereo servo cues
 
 Close ATS; replace the DLL and copy the sounds folder. Keep your config folder.
 Servo sound plays while adjustment directions are held and stops on release/exit.

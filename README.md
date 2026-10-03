@@ -7,7 +7,7 @@ The current Windows x64 plugin provides tap-to-toggle or held adjustment of left
 right mirrors in American Truck Simulator. It also supports one-key cycling,
 spoken selection cues, and a quiet servo loop routed left/center/right in stereo.
 
-The current version is **0.1.7**, pinned to the inspected ATS **1.61.3.1s**
+The current version is **0.1.8**, pinned to the inspected ATS **1.61.3.1s**
 executable and **SPF 1.2.5**. The Road Trip Ford Mustang was tested in-game.
 Other vehicles and executable builds have not been verified. Slot 4 can represent
 a different mirror in other vehicles. Unknown executables register no hooks.
@@ -23,6 +23,8 @@ In SPF Settings, select this plugin and expand **General Settings**:
 - **Hold mirror selector**: off uses tap-to-toggle; on adjusts while held.
 - **Mirror voice cues**: announces the mirror when entering or switching.
 - **Mirror servo sound**: motor loop during directional adjustment.
+- **Mirror selection click**: one short click on selection or switching, including cycling.
+  It follows left/center/right stereo routing and plays independently of speech. Exiting is silent.
 
 Toggle cycle goes left → center → right → off. Held cycle advances each press and
 releases to exit. Pause, focus loss and world unload exit adjustment.
@@ -71,7 +73,7 @@ playback in-game. Broader vehicle/game-version compatibility remains untested.
   release: Apache-2.0; see `licenses/SPF-API-Apache-2.0.txt`.
 - nlohmann/json 3.11.3: MIT; see `licenses/nlohmann-json-MIT.txt` and its header.
 - Spoken WAV cues were generated locally with Microsoft David Desktop.
-- Servo WAV is original synthesized audio; no game audio or executable is included.
+- Servo and selection-click WAVs are original synthesized audio; no game audio or executable is included.
 
 The repository includes source and small audio assets. Compiled binaries belong
 in release packages rather than source control. Source redistribution licensing

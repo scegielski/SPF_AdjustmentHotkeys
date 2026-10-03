@@ -6,6 +6,7 @@
 #include <fstream>
 #include "vendor/json.hpp"
 #include "ServoLoop.hpp"
+#include "SelectionClick.hpp"
 #include <SPF_Plugin.h>
 #include <SPF_Manifest_API.h>
 #include <SPF_Logger_API.h>
@@ -62,6 +63,10 @@ std::atomic<bool> holdSelectors{false};
 bool voiceCuesEnabled=true;
 bool servoEnabled=true;
 ServoLoop servo;
+SelectionClick selectionClick;
+bool selectionClicksEnabled=true;
+void PlaySelectionClick(int slot) { selectionClick.Play(slot); }
+void (*playSelectionClick)(int)=PlaySelectionClick;
 std::filesystem::path PluginFolder();
 int announcedSlot=-1;
 bool cuePlaying=false;
@@ -100,6 +105,7 @@ void UpdateVoiceCue(int slot) {
  if(slot==announcedSlot) return;
  announcedSlot=slot;
  const int index=CueIndex(slot);
+ if(selectionClicksEnabled && index>=0) playSelectionClick(slot);
  if(!voiceCuesEnabled || index<0 || cuePaths[index].empty()) return;
  // Asynchronous playback interrupts the old cue instead of building a queue.
  if(playCueSound(cuePaths[index].c_str(),nullptr,SND_FILENAME|SND_ASYNC|SND_NODEFAULT)) cuePlaying=true;
@@ -356,14 +362,15 @@ bool DefaultBindingNeeded(const nlohmann::json& saved,const char* group,const ch
 void BuildManifest(SPF_Manifest_Builder_Handle* h,const SPF_Manifest_Builder_API* api) {
     const auto saved=ReadSavedSettings(PluginFolder()/"config"/"settings.json");
     api->Info_SetName(h,kName);
-    api->Info_SetVersion(h,"0.1.7");
+    api->Info_SetVersion(h,"0.1.8");
     api->Info_SetMinFrameworkVersion(h,"1.2.5");
     api->Info_SetAuthor(h,"Local mirror diagnostics");
     api->Info_SetDescriptionLiteral(h,"Tap-to-toggle left, center and right mirror controls and movement through SPF.");
     api->Policy_SetAllowUserConfig(h,true);
     api->Policy_AddConfigurableSystem(h,"logging");
     api->Policy_AddConfigurableSystem(h,"settings");
-    api->Settings_SetJson(h,R"json({"hold_selectors":false,"voice_cues":true,"servo_sound":true})json");
+    api->Settings_SetJson(h,R"json({"hold_selectors":false,"voice_cues":true,"servo_sound":true,"selection_clicks":true})json");
+    api->Meta_AddCustomSetting(h,"settings.selection_clicks","Mirror selection click","Play a click when selecting or switching mirrors.","checkbox",nullptr,false);
     api->Meta_AddCustomSetting(h,"settings.servo_sound","Mirror servo sound","Play a quiet motor sound while a mirror is moving.","checkbox",nullptr,false);
     api->Meta_AddCustomSetting(h,"settings.voice_cues","Mirror voice cues","Announce the selected mirror when adjustment starts or switches.","checkbox",nullptr,false);
     api->Meta_AddCustomSetting(h,"settings.hold_selectors","Hold mirror selector","Off: tap to toggle. On: hold selector while adjusting; release to exit.","checkbox",nullptr,false);
@@ -411,6 +418,7 @@ void OnActivated(const SPF_Core_API* api) {
         Log(SPF_LOG_ERROR,"DIAG: expected function signatures not found at verified locations; no hooks registered."); return;
     }
     if(!servo.Open(PluginFolder()/"sounds"/"servo.wav")) Log(SPF_LOG_WARN,"MIRRORS: servo sound unavailable; check sounds/servo.wav and Windows audio output.");
+    if(!selectionClick.Open(PluginFolder()/"sounds"/"click.wav")) Log(SPF_LOG_WARN,"MIRRORS: selection click unavailable; check sounds/click.wav and Windows audio output.");
     observing.store(true);
     updateHook=hooks->Hook_Register(kName,"MirrorContext","Observe mirror context",reinterpret_cast<void*>(DetourUpdate),reinterpret_cast<void**>(&originalUpdate),kUpdatePattern,true);
     rotationHook=hooks->Hook_Register(kName,"MirrorRotation","Observe mirror rotation",reinterpret_cast<void*>(DetourSetRotation),reinterpret_cast<void**>(&originalSetRotation),kSetRotationPattern,true);
@@ -439,6 +447,7 @@ void OnUpdate() {
     const bool requestedVoice=!core->config || !config || core->config->Cfg_GetBool(config,"settings.voice_cues",true);
     if(!requestedVoice && voiceCuesEnabled) StopVoiceCue();
     voiceCuesEnabled=requestedVoice;
+    selectionClicksEnabled=!core->config || !config || core->config->Cfg_GetBool(config,"settings.selection_clicks",true);
     UpdateVoiceCue(selectedSlot.load());
     unsigned char mask=0;
     if(selectedSlot.load()>=0 && movementAllowed.load()) {
@@ -477,7 +486,7 @@ void OnUpdate() {
     }
 }
 void OnUnload() {
-    StopVoiceCue(); servo.Close();
+    StopVoiceCue(); servo.Close(); selectionClick.Close();
     // SPF removes hook objects after OnUnload. Preserve trampolines until then.
     ExitCenter(); movementAllowed.store(false);
     observing.store(false);
