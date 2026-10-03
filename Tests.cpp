@@ -68,25 +68,28 @@ int main() {
  CHECK(RunSeatUiStub(124,&carry)==11 && carry==1);
  gSyntheticSeatContext=0; CHECK(RunSeatUiStub(0,&carry)==11 && carry==1);
 
- voiceCuesEnabled=true; playCueSound=StubCue; cuePaths={L"left.wav",L"center.wav",L"right.wav",L"seat.wav"};
+ voiceCuesEnabled=true; playCueSound=StubCue; cuePaths={L"left.wav",L"center.wav",L"right.wav",L"seat.wav",L"off.wav"};
  playSelectionClick=StubClick;
  CHECK(CueIndex(0)==0 && CueIndex(4)==1 && CueIndex(2)==2 && CueIndex(-1)==-1);
  UpdateVoiceCue(0); CHECK(cueCalls==1 && lastCue==L"left.wav" && (cueFlags&SND_ASYNC));
  UpdateVoiceCue(0); CHECK(cueCalls==1);
  UpdateVoiceCue(4); CHECK(cueCalls==2 && lastCue==L"center.wav");
  UpdateVoiceCue(2); CHECK(cueCalls==3 && lastCue==L"right.wav");
- UpdateVoiceCue(-1); CHECK(cueCalls==3);
- voiceCuesEnabled=false; UpdateVoiceCue(0); CHECK(cueCalls==3);
- StopVoiceCue(); CHECK(cueCalls==4 && lastCue.empty());
- voiceCuesEnabled=true; UpdateVoiceCue(-1); UpdateVoiceCue(0); CHECK(cueCalls==5);
- CHECK(clickCalls==5 && lastClickSlot==0); // Includes selection with speech muted.
- UpdateVoiceCue(0); CHECK(clickCalls==5); // Held selection cannot repeat.
- UpdateVoiceCue(4); CHECK(clickCalls==6 && lastClickSlot==4);
- UpdateVoiceCue(2); CHECK(clickCalls==7 && lastClickSlot==2);
- UpdateVoiceCue(-1); CHECK(clickCalls==7); // Cycling to off is silent.
- selectionClicksEnabled=false; UpdateVoiceCue(0); CHECK(clickCalls==7 && cueCalls==8);
+ UpdateVoiceCue(-1); CHECK(cueCalls==4 && lastCue==L"off.wav" && lastClickSlot==-1);
+ const int afterExitClicks=clickCalls; UpdateVoiceCue(-1); CHECK(cueCalls==4 && clickCalls==afterExitClicks);
+ voiceCuesEnabled=false; UpdateVoiceCue(0); CHECK(cueCalls==4);
+ UpdateVoiceCue(-1); CHECK(cueCalls==4 && clickCalls==afterExitClicks+2 && lastClickSlot==-1);
+ StopVoiceCue(); CHECK(cueCalls==5 && lastCue.empty());
+ voiceCuesEnabled=true; UpdateVoiceCue(0); CHECK(cueCalls==6 && lastCue==L"left.wav");
+ const int beforeRepeat=clickCalls; UpdateVoiceCue(0); CHECK(clickCalls==beforeRepeat);
+ UpdateVoiceCue(4); CHECK(clickCalls==beforeRepeat+1 && lastClickSlot==4);
+ UpdateVoiceCue(2); CHECK(clickCalls==beforeRepeat+2 && lastClickSlot==2);
+ UpdateVoiceCue(-1); CHECK(clickCalls==beforeRepeat+3 && lastClickSlot==-1 && lastCue==L"off.wav");
+ selectionClicksEnabled=false; const int mutedClicks=clickCalls;
+ UpdateVoiceCue(0); UpdateVoiceCue(-1); CHECK(clickCalls==mutedClicks && lastCue==L"off.wav");
  selectionClicksEnabled=true;
  UpdateVoiceCue(6); CHECK(lastCue==L"seat.wav" && lastClickSlot==6);
+ UpdateVoiceCue(-1); CHECK(lastCue==L"off.wav" && lastClickSlot==-1);
  CHECK(ResolveHeldSelection(-1,8,0)==6); CHECK(ResolveHeldSelection(6,0,8)==-1);
  const auto saved=nlohmann::json::parse(R"json({"keybinds":{"SPF_MirrorControls.Select":{"left":{"bindings":[]},"cycle":{"bindings":[{"key":"KEY_1","type":"keyboard"}]}}}})json");
  CHECK(!DefaultBindingNeeded(saved,"Select","left"));

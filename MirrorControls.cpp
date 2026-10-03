@@ -68,13 +68,14 @@ bool voiceCuesEnabled=false;
 bool servoEnabled=true;
 ServoLoop servo;
 SelectionClick selectionClick;
+SelectionClick exitClick;
 bool selectionClicksEnabled=true;
-void PlaySelectionClick(int slot) { selectionClick.Play(slot==6?4:slot); }
+void PlaySelectionClick(int slot) { if(slot<0) exitClick.Play(4); else selectionClick.Play(slot==6?4:slot); }
 void (*playSelectionClick)(int)=PlaySelectionClick;
 std::filesystem::path PluginFolder();
 int announcedSlot=-1;
 bool cuePlaying=false;
-std::array<std::wstring,4> cuePaths{};
+std::array<std::wstring,5> cuePaths{};
 using PlayCueFn=BOOL(WINAPI*)(LPCWSTR,HMODULE,DWORD);
 PlayCueFn playCueSound=PlaySoundW;
 unsigned char previousHeld=0;
@@ -107,13 +108,14 @@ void InitializeCuePaths() {
  wchar_t path[32768]{};
  if(!GetModuleFileNameW(module,path,32768)) return;
  const auto folder=std::filesystem::path(path).parent_path()/L"sounds";
- const wchar_t* names[]={L"left.wav",L"center.wav",L"right.wav",L"seat.wav"};
- for(size_t i=0;i<4;++i) cuePaths[i]=(folder/names[i]).wstring();
+ const wchar_t* names[]={L"left.wav",L"center.wav",L"right.wav",L"seat.wav",L"off.wav"};
+ for(size_t i=0;i<5;++i) cuePaths[i]=(folder/names[i]).wstring();
 }
 void UpdateVoiceCue(int slot) {
  if(slot==announcedSlot) return;
+ const bool exiting=slot<0 && announcedSlot>=0;
  announcedSlot=slot;
- const int index=CueIndex(slot);
+ const int index=exiting?4:CueIndex(slot);
  if(selectionClicksEnabled && index>=0) playSelectionClick(slot);
  if(!voiceCuesEnabled || index<0 || cuePaths[index].empty()) return;
  // Asynchronous playback interrupts the old cue instead of building a queue.
@@ -378,7 +380,7 @@ bool DefaultBindingNeeded(const nlohmann::json& saved,const char* group,const ch
 void BuildManifest(SPF_Manifest_Builder_Handle* h,const SPF_Manifest_Builder_API* api) {
     const auto saved=ReadSavedSettings(PluginFolder()/"config"/"settings.json");
     api->Info_SetName(h,kName);
-    api->Info_SetVersion(h,"0.2.1");
+    api->Info_SetVersion(h,"0.2.2");
     api->Info_SetMinFrameworkVersion(h,"1.2.5");
     api->Info_SetAuthor(h,"SPF Adjustment Hotkeys");
     api->Info_SetDescriptionLiteral(h,"Live mirror and native VR seat adjustment through SPF hotkeys.");
@@ -386,7 +388,7 @@ void BuildManifest(SPF_Manifest_Builder_Handle* h,const SPF_Manifest_Builder_API
     api->Policy_AddConfigurableSystem(h,"logging");
     api->Policy_AddConfigurableSystem(h,"settings");
     api->Settings_SetJson(h,R"json({"hold_selectors":false,"voice_cues":false,"servo_sound":true,"selection_clicks":true})json");
-    api->Meta_AddCustomSetting(h,"settings.selection_clicks","Adjustment selection click","Play a click when selecting mirrors or seat.","checkbox",nullptr,false);
+    api->Meta_AddCustomSetting(h,"settings.selection_clicks","Adjustment selection click","Play selection and exit clicks for adjustment mode.","checkbox",nullptr,false);
     api->Meta_AddCustomSetting(h,"settings.servo_sound","Adjustment servo sound","Play a quiet motor sound while a mirror or seat is moving.","checkbox",nullptr,false);
     api->Meta_AddCustomSetting(h,"settings.voice_cues","Adjustment voice cues","Announce the selected mirror or seat when adjustment starts or switches.","checkbox",nullptr,false);
     api->Meta_AddCustomSetting(h,"settings.hold_selectors","Hold adjustment selector","Off: tap to toggle. On: hold selector while adjusting; release to exit.","checkbox",nullptr,false);
@@ -438,6 +440,7 @@ void OnActivated(const SPF_Core_API* api) {
     }
     if(!servo.Open(PluginFolder()/"sounds"/"servo.wav")) Log(SPF_LOG_WARN,"MIRRORS: servo sound unavailable; check sounds/servo.wav and Windows audio output.");
     if(!selectionClick.Open(PluginFolder()/"sounds"/"click.wav")) Log(SPF_LOG_WARN,"MIRRORS: selection click unavailable; check sounds/click.wav and Windows audio output.");
+    if(!exitClick.Open(PluginFolder()/"sounds"/"exit.wav")) Log(SPF_LOG_WARN,"Adjustment exit click unavailable; check sounds/exit.wav.");
     RegisterSeatHooks();
     observing.store(true);
     updateHook=hooks->Hook_Register(kName,"MirrorContext","Observe mirror context",reinterpret_cast<void*>(DetourUpdate),reinterpret_cast<void**>(&originalUpdate),kUpdatePattern,true);
@@ -507,7 +510,7 @@ void OnUpdate() {
     }
 }
 void OnUnload() {
-    StopVoiceCue(); servo.Close(); selectionClick.Close();
+    StopVoiceCue(); servo.Close(); selectionClick.Close(); exitClick.Close();
     // SPF removes hook objects after OnUnload. Preserve trampolines until then.
     ClearSeatCalibration(); ExitCenter(); movementAllowed.store(false);
     observing.store(false);

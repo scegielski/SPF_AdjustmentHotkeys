@@ -1,4 +1,4 @@
-SPF Mirror Controls 0.2.1 -- stereo servo cues
+SPF Mirror Controls 0.2.2 -- stereo servo cues
 
 Close ATS; replace the DLL and copy the sounds folder. Keep your config folder.
 Servo sound plays while adjustment directions are held and stops on release/exit.
@@ -31,3 +31,6 @@ Seat W/S move up/down; A/D move forward/back, using existing assignments.
 Seat sound uses both channels; optional voice says Seat adjust.
 Test seat selection immediately after loading a vehicle, without opening F4.
 Automatic initialization and save/reload persistence need live VR testing.
+
+Exit feedback: a centered double click and optional "Adjustment off" voice cue.
+The existing click and voice settings control these independently.
