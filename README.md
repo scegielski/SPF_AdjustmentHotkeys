@@ -1,0 +1,79 @@
+# SPF Adjustment Hotkeys
+
+Live, non-modal adjustments for American Truck Simulator through SPF hotkeys—
+adjust mirrors without opening menus, with cycling and audio feedback.
+
+The current Windows x64 plugin provides tap-to-toggle or held adjustment of left, center and
+right mirrors in American Truck Simulator. It also supports one-key cycling,
+spoken selection cues, and a quiet servo loop routed left/center/right in stereo.
+
+The current version is **0.1.7**, pinned to the inspected ATS **1.61.3.1s**
+executable and **SPF 1.2.5**. The Road Trip Ford Mustang was tested in-game.
+Other vehicles and executable builds have not been verified. Slot 4 can represent
+a different mirror in other vehicles. Unknown executables register no hooks.
+
+## Controls and settings
+
+On a fresh installation only **WASD** is assigned. Choose a selector or cycle
+binding in SPF Keybind Settings; left, center, right, cycle and reset start
+unassigned. Updates preserve saved bindings, including deliberately cleared keys.
+
+In SPF Settings, select this plugin and expand **General Settings**:
+
+- **Hold mirror selector**: off uses tap-to-toggle; on adjusts while held.
+- **Mirror voice cues**: announces the mirror when entering or switching.
+- **Mirror servo sound**: motor loop during directional adjustment.
+
+Toggle cycle goes left → center → right → off. Held cycle advances each press and
+releases to exit. Pause, focus loss and world unload exit adjustment.
+Servo audio is left-only for the left mirror, both channels for center, right-only
+for right. It is stereo routing rather than world-positioned VR audio. Windows
+default audio output is used separately from the game's FMOD mixer.
+
+## Build and test
+
+Requires Visual Studio 2022 C++ build tools (including MASM), Windows SDK and CMake.
+All required SPF headers and nlohmann/json are included; no dependency download is
+required during build.
+
+```powershell
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
+```
+
+The installable DLL and audio files are staged under
+`build/package/SPF_MirrorControls`. Build steps do not modify the game installation.
+
+## Install
+
+Close ATS. Copy the staged `SPF_MirrorControls` folder into
+`bin/win_x64/plugins/spfPlugins/`. Preserve the installed `config` folder when
+updating, then enable the plugin in SPF's plugin manager. Keep the earlier
+`SPF_MirrorCenter` and `SPF_MirrorDiagnostics` plugins disabled: hook targets overlap.
+
+## Implementation and verification
+
+Native selector and movement branches are intercepted only within a scoped call
+for the captured context. Native angle calculation, rotation setter and mirror
+camera refresh remain intact. Calls preserve context/delta arguments and forward
+once. Exact executable hash and unique instruction signatures gate registration.
+
+Regression tests exercise the real assembly stubs, slot/input/flags guards,
+hold/cycle transitions, persisted assigned and empty binding lists, speech cue
+selection/mute, servo movement cancellation and stereo channel routing.
+The user confirmed movement, center selection, persistence and stereo servo
+playback in-game. Broader vehicle/game-version compatibility remains untested.
+
+## Third-party material
+
+- SPF API 1.2.5 headers from TrackAndTruckDevs/SPF_ConsoleCommandHotkeys's official
+  release: Apache-2.0; see `licenses/SPF-API-Apache-2.0.txt`.
+- nlohmann/json 3.11.3: MIT; see `licenses/nlohmann-json-MIT.txt` and its header.
+- Spoken WAV cues were generated locally with Microsoft David Desktop.
+- Servo WAV is original synthesized audio; no game audio or executable is included.
+
+The repository includes source and small audio assets. Compiled binaries belong
+in release packages rather than source control. Source redistribution licensing
+should follow the destination repository's chosen license.
+
