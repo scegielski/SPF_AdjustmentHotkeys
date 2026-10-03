@@ -133,7 +133,7 @@ int NextSelection(int current,int requested) { return current==requested?-1:requ
 void ToggleSlot(int slot) {
  if(holdSelectors.load()) return;
  if(selectedSlot.load()==slot) { ExitCenter(); return; }
- if(slot==6 && !SeatReady()) { Log(SPF_LOG_WARN,"SEAT: first adjust the seat once in F4 for this vehicle to capture native limits."); return; }
+ if(slot==6 && !SeatReady()) { Log(SPF_LOG_WARN,"SEAT: native vehicle defaults unavailable; seat selection deferred."); return; }
  if(!movementAllowed.load() || !HooksReady()) { Log(SPF_LOG_WARN,"MIRRORS: unavailable until driving context and hooks are ready."); return; }
  selectedSlot.store(slot); inputMask.store(0); SetMovementBlocking(true);
  Log(SPF_LOG_INFO,slot==0?"MIRRORS: left on.":slot==2?"MIRRORS: right on.":slot==6?"SEAT: on.":"MIRRORS: center on.");
@@ -159,7 +159,7 @@ void CycleMirror() {
  if(!movementAllowed.load() || !HooksReady()) return;
  const bool hold=holdSelectors.load();
  int next=NextCycleSlot(hold?lastCycleSlot:selectedSlot.load(),hold);
- if(next==6 && !SeatReady()) { Log(SPF_LOG_WARN,"SEAT: not calibrated; skipping seat. Adjust once in F4 to capture this vehicle."); next=hold?0:-1; }
+ if(next==6 && !SeatReady()) { Log(SPF_LOG_WARN,"SEAT: native vehicle defaults unavailable; skipping seat."); next=hold?0:-1; }
  if(next<0) { ExitCenter(); return; }
  if(hold) { lastCycleSlot=next; heldCycleSlot=next; }
  selectedSlot.store(next); inputMask.store(0); SetMovementBlocking(true);
@@ -179,7 +179,7 @@ void PollHoldSelection() {
  const int next=ResolveHeldWithCycle(current,held,previousHeld,cycleHeld,heldCycleSlot);
  previousHeld=held;
  if(next==current) return;
- if(next==6 && !SeatReady()) { Log(SPF_LOG_WARN,"SEAT: adjust once in F4 to capture this vehicle before selecting seat mode."); return; }
+ if(next==6 && !SeatReady()) { Log(SPF_LOG_WARN,"SEAT: native vehicle defaults unavailable; seat selection deferred."); return; }
  if(next<0) { ExitCenter(); return; }
  selectedSlot.store(next); inputMask.store(0); SetMovementBlocking(true);
  Log(SPF_LOG_INFO,next==0?"MIRRORS: left held.":next==2?"MIRRORS: right held.":next==6?"SEAT: held.":"MIRRORS: center held.");
@@ -378,7 +378,7 @@ bool DefaultBindingNeeded(const nlohmann::json& saved,const char* group,const ch
 void BuildManifest(SPF_Manifest_Builder_Handle* h,const SPF_Manifest_Builder_API* api) {
     const auto saved=ReadSavedSettings(PluginFolder()/"config"/"settings.json");
     api->Info_SetName(h,kName);
-    api->Info_SetVersion(h,"0.2.0");
+    api->Info_SetVersion(h,"0.2.1");
     api->Info_SetMinFrameworkVersion(h,"1.2.5");
     api->Info_SetAuthor(h,"SPF Adjustment Hotkeys");
     api->Info_SetDescriptionLiteral(h,"Live mirror and native VR seat adjustment through SPF hotkeys.");

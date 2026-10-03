@@ -1,4 +1,4 @@
-SPF Mirror Controls 0.2.0 -- stereo servo cues
+SPF Mirror Controls 0.2.1 -- stereo servo cues
 
 Close ATS; replace the DLL and copy the sounds folder. Keep your config folder.
 Servo sound plays while adjustment directions are held and stops on release/exit.
@@ -25,8 +25,9 @@ hook, hold/cycle, voice and persistence cases. This servo/audio-routing update s
 needs in-game testing on your headset: test each mirror, release, switch while
 moving and ensure the voice cue remains audible alongside the servo loop.
 
-Native seat prototype: disable Seat Diagnostics. After each vehicle/world load,
-make one small seat adjustment in F4, then close F4. Cycle now includes seat.
+Native seat prototype: disable Seat Diagnostics. Native defaults initialize automatically;
+no F4 nudge is needed. Cycle includes seat as soon as vehicle data are ready.
 Seat W/S move up/down; A/D move forward/back, using existing assignments.
 Seat sound uses both channels; optional voice says Seat adjust.
-Seat hotkey movement and save/reload persistence need live VR testing.
+Test seat selection immediately after loading a vehicle, without opening F4.
+Automatic initialization and save/reload persistence need live VR testing.

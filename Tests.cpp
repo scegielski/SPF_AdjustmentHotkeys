@@ -20,6 +20,38 @@ extern "C" int RunSeatUiStub(uintptr_t,unsigned char*);
 extern "C" void TestSeatUiPass();
 extern "C" void TestSeatUiBypass();
 int main() {
+ // Resolve native defaults from live-shaped memory without opening F4.
+ std::array<unsigned char,0x31b8> world{};
+ std::array<unsigned char,0x28> service{};
+ std::array<unsigned char,0x200> seatActor{};
+ std::array<unsigned char,0x220> settings{};
+ std::array<unsigned char,0x12a4> config{};
+ std::array<unsigned char,0x48> manager{};
+ std::array<unsigned char,0x5d0> camera{};
+ std::array<uintptr_t,3> cameras={0,0,reinterpret_cast<uintptr_t>(camera.data())};
+ Put(world,0x31b0,reinterpret_cast<uintptr_t>(service.data()));
+ Put(service,8,uint32_t{0x80000000}); Put(service,0x18,reinterpret_cast<uintptr_t>(seatActor.data()));
+ Put(service,0x20,reinterpret_cast<uintptr_t>(config.data())); Put(seatActor,0x1f8,reinterpret_cast<uintptr_t>(settings.data()));
+ Put(manager,0x38,reinterpret_cast<uintptr_t>(cameras.data())); Put(manager,0x40,uint64_t{3});
+ Put(camera,8,uint32_t{0x80000000});
+ for(size_t i=0;i<3;++i) { Put(camera,0x4a4+i*4,float(i+1)); Put(camera,0x498+i*4,99.f); }
+ const size_t bounds[]={0x1284,0x1290,0x1294,0x1288,0x128c,0x1298};
+ for(size_t i=0;i<6;++i) Put(config,bounds[i],float(i%3+1)+(i<3?-0.25f:0.25f));
+ Put(camera,0x5b0,4.f); Put(camera,0x5c0,5.f); Put(camera,0x408,6.f);
+ Put(config,0x129c,7.f); Put(config,0x12a0,8.f); Put(camera,0x4b1,static_cast<unsigned char>(1));
+ std::array<unsigned char,0x400> automatic{}; uintptr_t identity=0;
+ auto readDefaults=[&] { return ReadSeatDefaults(reinterpret_cast<uintptr_t>(world.data()),reinterpret_cast<uintptr_t>(manager.data()),automatic,identity); };
+ CHECK(readDefaults() && identity==reinterpret_cast<uintptr_t>(settings.data()));
+ CHECK(SeatFloat(automatic,0x39c)==1 && SeatFloat(automatic,0x3a0)==2 && SeatFloat(automatic,0x3a4)==3);
+ CHECK(SeatFloat(automatic,0x388)==1.75f && SeatFloat(automatic,0x398)==3.25f);
+ CHECK(SeatFloat(automatic,0x3b4)==4 && SeatFloat(automatic,0x3c4)==5 && SeatFloat(automatic,0x3d4)==6 && SeatFloat(automatic,0x3e4)==7 && SeatFloat(automatic,0x3f4)==8 && automatic[0x3f8]==1);
+ CHECK(PrepareSeatValues(automatic,{0.f,0.1f,0.1f,1.f,2.f,3.f,4.f,5.f},0.1f,4));
+ CHECK(std::abs(SeatFloat(automatic,0x37c)-2.11f)<0.00001f && SeatFloat(automatic,0x3c8)==7 && SeatFloat(automatic,0x3a8)==8);
+ Put(manager,0x40,uint64_t{2}); CHECK(!readDefaults()); Put(manager,0x40,uint64_t{65}); CHECK(!readDefaults()); Put(manager,0x40,uint64_t{3});
+ Put(camera,8,uint32_t{0}); CHECK(!readDefaults()); Put(camera,8,uint32_t{0x80000000});
+ Put(service,8,uint32_t{0}); CHECK(!readDefaults()); Put(service,8,uint32_t{0x80000000});
+ Put(config,0x1290,9.f); CHECK(!readDefaults()); Put(config,0x1290,1.75f);
+ cameras[2]=1; CHECK(!readDefaults()); cameras[2]=reinterpret_cast<uintptr_t>(camera.data()); CHECK(readDefaults());
  std::array<unsigned char,0x400> seat{};
  for(size_t axis=0;axis<3;++axis) { SeatPut(seat,0x384+axis*4,-0.1f); SeatPut(seat,0x390+axis*4,0.1f); SeatPut(seat,0x39c+axis*4,0.f); }
  std::array<float,8> seatCurrent={0.02f,0.01f,-0.01f,1.f,2.f,3.f,4.f,5.f};

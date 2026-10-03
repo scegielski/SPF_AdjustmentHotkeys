@@ -1,5 +1,5 @@
 // Reuse the game's seat apply routine with a private menu-value snapshot.
-// Its native camera/vehicle writes and refresh run unchanged; only its 48 8B 4F 10 BA A0 00 00 00 E8 8F 8E 23 FF 48 8B D8 tail is skipped.
+// Its native camera/vehicle writes and refresh run unchanged; only its UI tail is skipped.
 using SeatApplyFn=void(__fastcall*)(void*);
 SeatApplyFn originalSeatApply=nullptr;
 SPF_Hook_Handle* seatApplyHook=nullptr;
@@ -28,6 +28,43 @@ bool ValidSeatTemplate(const std::array<unsigned char,0x400>& data) {
  for(size_t offset:{0x3b4,0x3c4,0x3d4,0x3e4,0x3f4}) if(!std::isfinite(SeatFloat(data,offset))) return false;
  return true;
 }
+// The native F4 initializer obtains these values from the vehicle and camera,
+// before any adjustment. Read the same sources without constructing menu UI.
+bool ReadSeatDefaults(uintptr_t global,uintptr_t manager,std::array<unsigned char,0x400>& data,uintptr_t& settings) {
+ uintptr_t service=0,actor=0,vehicleConfig=0,array=0,camera=0;
+ uint64_t count=0; uint32_t flags=0;
+ settings=0; data.fill(0);
+ if(!global || !manager || !Read(global+0x31b0,service) || !service ||
+    !Read(service+8,flags) || !(flags&0x80000000u) ||
+    !Read(service+0x18,actor) || !actor || !Read(actor+0x1f8,settings) || !settings ||
+    !Read(service+0x20,vehicleConfig) || !vehicleConfig || !Read(manager+0x40,count) || count<3 || count>64 ||
+    !Read(manager+0x38,array) || !array || !Read(array+16,camera) || !camera ||
+    !Read(camera+8,flags) || !(flags&0x80000000u)) return false;
+ const size_t cameraSources[]={0x4a4,0x4a8,0x4ac,0x5b0,0x5c0,0x408};
+ const size_t cameraTargets[]={0x39c,0x3a0,0x3a4,0x3b4,0x3c4,0x3d4};
+ const size_t configSources[]={0x1284,0x1290,0x1294,0x1288,0x128c,0x1298,0x129c,0x12a0};
+ const size_t configTargets[]={0x384,0x388,0x38c,0x390,0x394,0x398,0x3e4,0x3f4};
+ float value=0;
+ for(size_t i=0;i<6;++i) { if(!Read(camera+cameraSources[i],value) || !std::isfinite(value)) return false; SeatPut(data,cameraTargets[i],value); }
+ for(size_t i=0;i<8;++i) { if(!Read(vehicleConfig+configSources[i],value) || !std::isfinite(value)) return false; SeatPut(data,configTargets[i],value); }
+ // The camera helper uses this handedness flag when refreshing head angles.
+ if(!Read(camera+0x4b1,data[0x3f8])) return false;
+ return ValidSeatTemplate(data);
+}
+bool RefreshSeatDefaults() {
+ const auto base=reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+ uintptr_t global=0,manager=0,settings=0;
+ std::array<unsigned char,0x400> fresh{};
+ const bool valid=Read(base+0x36b8d70,global) && Read(base+0x36b8de0,manager) && ReadSeatDefaults(global,manager,fresh,settings);
+ bool first=false;
+ { std::lock_guard lock(seatMutex);
+   if(!valid) { seatCalibrated=false; seatVehicleSettings=0; return false; }
+   first=!seatCalibrated || seatVehicleSettings!=settings;
+   seatTemplate=fresh; seatVehicleSettings=settings; seatCalibrated=true;
+ }
+ if(first) Log(SPF_LOG_INFO,"SEAT: native defaults and limits initialized automatically; seat mode ready.");
+ return true;
+}
 void DetourSeatApply(void* context) {
  originalSeatApply(context);
  if(reinterpret_cast<uintptr_t>(context)==gSyntheticSeatContext) return;
@@ -41,8 +78,7 @@ void DetourSeatApply(void* context) {
 bool SeatReady() {
  if(!core || !core->hooks || !seatApplyHook || !seatUiHook || !originalSeatApply) return false;
  for(auto h:{seatApplyHook,seatUiHook}) if(!core->hooks->Hook_IsInstalled(h) || !core->hooks->Hook_IsEnabled(h)) return false;
- std::lock_guard lock(seatMutex);
- return seatCalibrated && seatVehicleSettings && LiveSeatSettings()==seatVehicleSettings;
+ return RefreshSeatDefaults();
 }
 bool PrepareSeatValues(std::array<unsigned char,0x400>& data,const std::array<float,8>& current,float dt,unsigned char mask) {
  if(!std::isfinite(dt) || dt<=0 || dt>0.1f || !ValidSeatTemplate(data)) return false;
@@ -85,5 +121,5 @@ void RegisterSeatHooks() {
  gSeatApplyReturn=reinterpret_cast<void*>(base+0x114e19a);
  seatUiHook=core->hooks->Hook_Register(kName,"SeatUiTail","Skip seat UI only during hotkey call",reinterpret_cast<void*>(SeatUiStub),&gSeatUiOriginal,kSeatUiPattern,true);
  seatApplyHook=core->hooks->Hook_Register(kName,"SeatApply","Capture native seat defaults and limits",reinterpret_cast<void*>(DetourSeatApply),reinterpret_cast<void**>(&originalSeatApply),kSeatApplyPattern,true);
- Log(SPF_LOG_INFO,"SEAT: hooks requested; adjust seat once through F4 after loading a vehicle to capture its limits.");
+ Log(SPF_LOG_INFO,"SEAT: hooks requested; native defaults initialize automatically when seat mode is selected.");
 }
