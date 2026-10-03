@@ -1,4 +1,4 @@
-SPF Mirror Controls 0.2.4 -- stereo servo cues
+SPF Mirror Controls 0.2.5 -- stereo servo cues
 
 Close ATS; replace the DLL and copy the sounds folder. Keep your config folder.
 Servo sound plays while adjustment directions are held and stops on release/exit.
@@ -38,3 +38,5 @@ The existing click and voice settings control these independently.
 Exit feedback is emitted immediately on leaving adjustment mode.
 
 Exit speech now uses a dedicated Windows audio stream.
+
+Exit voice clip uses 44.1 kHz PCM, matching the dedicated stream loader.

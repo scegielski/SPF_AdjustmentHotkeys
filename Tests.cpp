@@ -19,7 +19,14 @@ template<class T,size_t N> void Put(std::array<unsigned char,N>& bytes,size_t of
 extern "C" int RunSeatUiStub(uintptr_t,unsigned char*);
 extern "C" void TestSeatUiPass();
 extern "C" void TestSeatUiBypass();
-int main() {
+int main(int argc,char** argv) {
+ if(argc>1) {
+  std::ifstream clip(argv[1],std::ios::binary); ServoWaveHeader header{};
+  CHECK(clip.read(reinterpret_cast<char*>(&header),sizeof(header)) && ValidServoHeader(header));
+  std::vector<char> pcm(header.bytes); CHECK(clip.read(pcm.data(),pcm.size()));
+  CHECK(std::any_of(pcm.begin(),pcm.end(),[](char value){ return value!=0; }));
+ }
+
  // Resolve native defaults from live-shaped memory without opening F4.
  std::array<unsigned char,0x31b8> world{};
  std::array<unsigned char,0x28> service{};

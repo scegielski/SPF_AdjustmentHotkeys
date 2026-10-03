@@ -11,7 +11,7 @@ add_executable(MirrorControlsTests Tests.cpp SlotHooks.asm TestHooks.asm)
 target_include_directories(MirrorControlsTests PRIVATE SPF_API)
 target_link_libraries(MirrorControlsTests PRIVATE bcrypt winmm)
 target_compile_definitions(MirrorControlsTests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-add_test(NAME MirrorRegression COMMAND MirrorControlsTests)
+add_test(NAME MirrorRegression COMMAND MirrorControlsTests "${CMAKE_CURRENT_SOURCE_DIR}/sounds/off.wav")
 
 add_custom_command(TARGET SPF_MirrorControls POST_BUILD
  COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/package/SPF_MirrorControls"
