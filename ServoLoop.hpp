@@ -64,6 +64,8 @@ public:
  ~ServoLoop() { Close(); }
 };
 inline bool ServoMovement(int slot,unsigned char mask,bool enabled,bool allowed) {
+ if(slot==7) mask&=3; // Extension uses only the horizontal adjustment pair.
+ if(slot==8) mask&=12; // Tilt uses only the vertical adjustment pair.
  const bool horizontal=((mask&1)!=0)!=((mask&2)!=0);
  const bool vertical=((mask&4)!=0)!=((mask&8)!=0);
  return enabled && allowed && slot>=0 && (horizontal||vertical);

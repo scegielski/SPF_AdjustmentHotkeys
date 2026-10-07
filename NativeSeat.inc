@@ -47,6 +47,8 @@ bool ReadSeatDefaults(uintptr_t global,uintptr_t manager,std::array<unsigned cha
  float value=0;
  for(size_t i=0;i<6;++i) { if(!Read(camera+cameraSources[i],value) || !std::isfinite(value)) return false; SeatPut(data,cameraTargets[i],value); }
  for(size_t i=0;i<8;++i) { if(!Read(vehicleConfig+configSources[i],value) || !std::isfinite(value)) return false; SeatPut(data,configTargets[i],value); }
+ SeatPut(data,0x3dc,0.f); SeatPut(data,0x3e0,1.f);
+ SeatPut(data,0x3ec,0.f); SeatPut(data,0x3f0,1.f);
  // The camera helper uses this handedness flag when refreshing head angles.
  if(!Read(camera+0x4b1,data[0x3f8])) return false;
  return ValidSeatTemplate(data);
@@ -80,37 +82,47 @@ bool SeatReady() {
  for(auto h:{seatApplyHook,seatUiHook}) if(!core->hooks->Hook_IsInstalled(h) || !core->hooks->Hook_IsEnabled(h)) return false;
  return RefreshSeatDefaults();
 }
-bool PrepareSeatValues(std::array<unsigned char,0x400>& data,const std::array<float,8>& current,float dt,unsigned char mask) {
+bool PrepareSeatValues(std::array<unsigned char,0x400>& data,const std::array<float,8>& current,float dt,unsigned char mask,int mode=6) {
  if(!std::isfinite(dt) || dt<=0 || dt>0.1f || !ValidSeatTemplate(data)) return false;
  for(float v:current) if(!std::isfinite(v)) return false;
- if(!(mask&31)) return false;
+ if(!(mask&31) || mode<6 || mode>8) return false;
  const float step=0.1f*dt;
  const float vertical=((mask&4)?1.f:0.f)-((mask&8)?1.f:0.f);
  const float depth=((mask&2)?1.f:0.f)-((mask&1)?1.f:0.f);
- if(!(mask&16) && vertical==0 && depth==0) return false;
+ if(!(mask&16) && (mode==6?(vertical==0 && depth==0):mode==7?depth==0:vertical==0)) return false;
  for(size_t axis=0;axis<3;++axis) {
   const float baseline=SeatFloat(data,0x39c+axis*4);
   float value=baseline+current[axis];
-  if(axis==1) value=(mask&16)?baseline:value+vertical*step;
-  if(axis==2) value=(mask&16)?baseline:value+depth*step;
+  if(mode==6 && axis==1) value=(mask&16)?baseline:value+vertical*step;
+  if(mode==6 && axis==2) value=(mask&16)?baseline:value+depth*step;
   // Preserve lateral position, which this VR prototype does not adjust.
-  if(axis>0) value=std::clamp(value,SeatFloat(data,0x384+axis*4),SeatFloat(data,0x390+axis*4));
+  if(mode==6 && axis>0) value=std::clamp(value,SeatFloat(data,0x384+axis*4),SeatFloat(data,0x390+axis*4));
   SeatPut(data,0x378+axis*4,value);
  }
  // Native apply also writes these adjustments; reconstruct all from current state.
  const size_t valueOffsets[]={0x3c8,0x3d8,0x3e8,0x3a8,0x3b8};
  const size_t baseOffsets[]={0x3d4,0x3e4,0x3f4,0x3b4,0x3c4};
  for(size_t i=0;i<5;++i) SeatPut(data,valueOffsets[i],current[i+3]+SeatFloat(data,baseOffsets[i]));
+ if(mode>=7) {
+  const size_t valueOffset=mode==7?0x3e8:0x3d8;
+  const size_t baseOffset=mode==7?0x3f4:0x3e4;
+  const float minimum=SeatFloat(data,valueOffset+4),maximum=SeatFloat(data,valueOffset+8);
+  if(!std::isfinite(minimum) || !std::isfinite(maximum) || minimum>maximum || minimum<0 || maximum>1) return false;
+  const float baseline=SeatFloat(data,baseOffset);
+  const float value=(mask&16)?baseline:SeatFloat(data,valueOffset)+(mode==7?depth:vertical)*0.25f*dt;
+  SeatPut(data,valueOffset,std::clamp(value,minimum,maximum));
+ }
+
  return true;
 }
-void MoveNativeSeat(float dt,unsigned char mask) {
+void MoveNativeSeat(float dt,unsigned char mask,int mode) {
  if(!SeatReady()) return;
  std::lock_guard lock(seatMutex);
  std::array<float,8> current{};
  const auto settings=LiveSeatSettings();
  if(settings!=seatVehicleSettings || !SafeRead(settings+0x1f0,current.data(),sizeof(current))) { seatCalibrated=false; return; }
  auto values=seatTemplate;
- if(!PrepareSeatValues(values,current,dt,mask)) return;
+ if(!PrepareSeatValues(values,current,dt,mask,mode)) return;
  gSyntheticSeatContext=reinterpret_cast<uintptr_t>(values.data());
  originalSeatApply(values.data());
  gSyntheticSeatContext=0;

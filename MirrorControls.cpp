@@ -71,12 +71,12 @@ SelectionClick selectionClick;
 SelectionClick exitClick;
 SelectionClick exitVoice;
 bool selectionClicksEnabled=true;
-void PlaySelectionClick(int slot) { if(slot<0) exitClick.Play(4); else selectionClick.Play(slot==6?4:slot); }
+void PlaySelectionClick(int slot) { if(slot<0) exitClick.Play(4); else selectionClick.Play(slot>=6?4:slot); }
 void (*playSelectionClick)(int)=PlaySelectionClick;
 std::filesystem::path PluginFolder();
 int announcedSlot=-1;
 bool cuePlaying=false;
-std::array<std::wstring,5> cuePaths{};
+std::array<std::wstring,7> cuePaths{};
 using PlayCueFn=BOOL(WINAPI*)(LPCWSTR,HMODULE,DWORD);
 // Exit speech has its own output stream instead of the shared PlaySound channel.
 BOOL WINAPI PlayAdjustmentCue(LPCWSTR path,HMODULE module,DWORD flags) {
@@ -100,7 +100,7 @@ std::mutex updateMutex;
 void Log(SPF_LogLevel,const char*);
 bool SeatReady();
 void ClearSeatCalibration();
-void MoveNativeSeat(float dt,unsigned char mask);
+void MoveNativeSeat(float dt,unsigned char mask,int mode=6);
 void RegisterSeatHooks();
 void ToggleSeat();
 bool HooksReady() {
@@ -110,7 +110,7 @@ bool HooksReady() {
   if (!core->hooks->Hook_IsInstalled(h) || !core->hooks->Hook_IsEnabled(h)) return false;
  return true;
 }
-int CueIndex(int slot) { return slot==0?0:slot==4?1:slot==2?2:slot==6?3:-1; }
+int CueIndex(int slot) { return slot==0?0:slot==4?1:slot==2?2:slot==6?3:slot==7?5:slot==8?6:-1; }
 void InitializeCuePaths() {
  HMODULE module=nullptr;
  if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -118,8 +118,8 @@ void InitializeCuePaths() {
  wchar_t path[32768]{};
  if(!GetModuleFileNameW(module,path,32768)) return;
  const auto folder=std::filesystem::path(path).parent_path()/L"sounds";
- const wchar_t* names[]={L"left.wav",L"center.wav",L"right.wav",L"seat.wav",L"off.wav"};
- for(size_t i=0;i<5;++i) cuePaths[i]=(folder/names[i]).wstring();
+ const wchar_t* names[]={L"left.wav",L"center.wav",L"right.wav",L"seat.wav",L"off.wav",L"steering_extension.wav",L"steering_tilt.wav"};
+ for(size_t i=0;i<7;++i) cuePaths[i]=(folder/names[i]).wstring();
 }
 void UpdateVoiceCue(int slot) {
  if(slot==announcedSlot) return;
@@ -149,37 +149,39 @@ int NextSelection(int current,int requested) { return current==requested?-1:requ
 void ToggleSlot(int slot) {
  if(holdSelectors.load()) return;
  if(selectedSlot.load()==slot) { ExitCenter(); return; }
- if(slot==6 && !SeatReady()) { Log(SPF_LOG_WARN,"SEAT: native vehicle defaults unavailable; seat selection deferred."); return; }
+ if(slot>=6 && !SeatReady()) { Log(SPF_LOG_WARN,"SEAT: native vehicle defaults unavailable; seat selection deferred."); return; }
  if(!movementAllowed.load() || !HooksReady()) { Log(SPF_LOG_WARN,"MIRRORS: unavailable until driving context and hooks are ready."); return; }
  selectedSlot.store(slot); inputMask.store(0); SetMovementBlocking(true);
- Log(SPF_LOG_INFO,slot==0?"MIRRORS: left on.":slot==2?"MIRRORS: right on.":slot==6?"SEAT: on.":"MIRRORS: center on.");
+ Log(SPF_LOG_INFO,slot==0?"MIRRORS: left on.":slot==2?"MIRRORS: right on.":slot==7?"STEERING: extension on.":slot==8?"STEERING: tilt on.":slot==6?"SEAT: on.":"MIRRORS: center on.");
 }
 int ResolveHeldSelection(int current,unsigned char held,unsigned char previous) {
- const int slots[]={0,2,4,6};
+ const int slots[]={0,2,4,6,7,8};
  int target=current;
  // Newly pressed selector wins; simultaneous new presses use center/right/left priority.
  const auto pressed=static_cast<unsigned char>(held & ~previous);
- for(int i=0;i<4;++i) if(pressed & (1u<<i)) target=slots[i];
- for(int i=0;i<4;++i) if(target==slots[i] && (held & (1u<<i))) return target;
- for(int i=3;i>=0;--i) if(held & (1u<<i)) return slots[i];
+ for(int i=0;i<6;++i) if(pressed & (1u<<i)) target=slots[i];
+ for(int i=0;i<6;++i) if(target==slots[i] && (held & (1u<<i))) return target;
+ for(int i=5;i>=0;--i) if(held & (1u<<i)) return slots[i];
  return -1;
 }
 int NextCycleSlot(int current,bool hold) {
  if(current==0) return 4;
  if(current==4) return 2;
  if(current==2) return 6;
- if(current==6) return hold?0:-1;
+ if(current==6) return 7;
+ if(current==7) return 8;
+ if(current==8) return hold?0:-1;
  return 0;
 }
 void CycleMirror() {
  if(!movementAllowed.load() || !HooksReady()) return;
  const bool hold=holdSelectors.load();
  int next=NextCycleSlot(hold?lastCycleSlot:selectedSlot.load(),hold);
- if(next==6 && !SeatReady()) { Log(SPF_LOG_WARN,"SEAT: native vehicle defaults unavailable; skipping seat."); next=hold?0:-1; }
+ if(next>=6 && !SeatReady()) { Log(SPF_LOG_WARN,"SEAT: native vehicle defaults unavailable; skipping seat."); next=hold?0:-1; }
  if(next<0) { ExitCenter(); return; }
  if(hold) { lastCycleSlot=next; heldCycleSlot=next; }
  selectedSlot.store(next); inputMask.store(0); SetMovementBlocking(true);
- Log(SPF_LOG_INFO,next==0?"MIRRORS: cycled to left.":next==4?"MIRRORS: cycled to center.":next==6?"SEAT: cycled to seat.":"MIRRORS: cycled to right.");
+ Log(SPF_LOG_INFO,next==0?"MIRRORS: cycled to left.":next==4?"MIRRORS: cycled to center.":next==7?"STEERING: cycled to extension.":next==8?"STEERING: cycled to tilt.":next==6?"SEAT: cycled to seat.":"MIRRORS: cycled to right.");
 }
 int ResolveHeldWithCycle(int current,unsigned char held,unsigned char previous,bool cycleHeld,int cycleSlot) {
  if((held & ~previous)!=0) return ResolveHeldSelection(current,held,previous);
@@ -188,22 +190,24 @@ int ResolveHeldWithCycle(int current,unsigned char held,unsigned char previous,b
 }
 void PollHoldSelection() {
  unsigned char held=0;
- const char* actions[]={"Select.left","Select.right","Select.center","Select.seat"};
- for(int i=0;i<4;++i) if(core->keybinds->Kbind_GetActionValue(keys,actions[i])>0.5f) held|=static_cast<unsigned char>(1u<<i);
+ const char* actions[]={"Select.left","Select.right","Select.center","Select.seat","Select.steering_extension","Select.steering_tilt"};
+ for(int i=0;i<6;++i) if(core->keybinds->Kbind_GetActionValue(keys,actions[i])>0.5f) held|=static_cast<unsigned char>(1u<<i);
  const int current=selectedSlot.load();
  const bool cycleHeld=core->keybinds->Kbind_GetActionValue(keys,"Select.cycle")>0.5f;
  const int next=ResolveHeldWithCycle(current,held,previousHeld,cycleHeld,heldCycleSlot);
  previousHeld=held;
  if(next==current) return;
- if(next==6 && !SeatReady()) { Log(SPF_LOG_WARN,"SEAT: native vehicle defaults unavailable; seat selection deferred."); return; }
+ if(next>=6 && !SeatReady()) { Log(SPF_LOG_WARN,"SEAT: native vehicle defaults unavailable; seat selection deferred."); return; }
  if(next<0) { ExitCenter(); return; }
  selectedSlot.store(next); inputMask.store(0); SetMovementBlocking(true);
- Log(SPF_LOG_INFO,next==0?"MIRRORS: left held.":next==2?"MIRRORS: right held.":next==6?"SEAT: held.":"MIRRORS: center held.");
+ Log(SPF_LOG_INFO,next==0?"MIRRORS: left held.":next==2?"MIRRORS: right held.":next==7?"STEERING: extension held.":next==8?"STEERING: tilt held.":next==6?"SEAT: held.":"MIRRORS: center held.");
 }
 void ToggleLeft() { ToggleSlot(0); }
 void ToggleRight() { ToggleSlot(2); }
 void ToggleCenter() { ToggleSlot(4); }
 void ToggleSeat() { ToggleSlot(6); }
+void ToggleSteeringExtension() { ToggleSlot(7); }
+void ToggleSteeringTilt() { ToggleSlot(8); }
 void NoAction() {}
 void MapContext(uintptr_t) noexcept;
 void WorldReset() { ClearSeatCalibration(); ExitCenter(); movementAllowed.store(false); currentContext.store(0); previousHeld=0; heldCycleSlot=-1; lastCycleSlot=-1; MapContext(0); }
@@ -294,7 +298,7 @@ void CaptureSnapshot() noexcept {
     state.hasSnapshot=true;
 }
 bool CanOverride(uintptr_t context,int slot) {
- if (slot<0 || slot==6 || !movementAllowed.load()) return false;
+ if (slot<0 || slot>=6 || !movementAllowed.load()) return false;
  std::lock_guard lock(state.mutex);
  return context && state.entries && static_cast<uint64_t>(slot)<state.count && state.count<=9;
 }
@@ -312,7 +316,7 @@ void DetourUpdate(void* context,float dt) {
  else gOverrideContext=0;
  originalUpdate(context,dt); // Exactly one call; native getter, setter and camera refresh.
  gOverrideContext=0; gInputMask=0;
- if(slot==6 && movementAllowed.load()) MoveNativeSeat(dt,inputMask.load());
+ if(slot>=6 && movementAllowed.load()) MoveNativeSeat(dt,inputMask.load(),slot);
 }
 void DetourSetRotation(void* object, const float* angles) {
     int slot=-1; uint64_t generation=0;
@@ -394,25 +398,27 @@ bool DefaultBindingNeeded(const nlohmann::json& saved,const char* group,const ch
 void BuildManifest(SPF_Manifest_Builder_Handle* h,const SPF_Manifest_Builder_API* api) {
     const auto saved=ReadSavedSettings(PluginFolder()/"config"/"settings.json");
     api->Info_SetName(h,kName);
-    api->Info_SetVersion(h,"0.2.7");
+    api->Info_SetVersion(h,"0.3.0");
     api->Info_SetMinFrameworkVersion(h,"1.2.5");
     api->Info_SetAuthor(h,"SPF Adjustment Hotkeys");
-    api->Info_SetDescriptionLiteral(h,"Live mirror and native VR seat adjustment through SPF hotkeys.");
+    api->Info_SetDescriptionLiteral(h,"Live mirror, native VR seat and steering-wheel adjustment through SPF hotkeys.");
     api->Policy_SetAllowUserConfig(h,true);
     api->Policy_AddConfigurableSystem(h,"logging");
     api->Policy_AddConfigurableSystem(h,"settings");
     api->Settings_SetJson(h,R"json({"hold_selectors":false,"voice_cues":false,"servo_sound":true,"selection_clicks":true})json");
     api->Meta_AddCustomSetting(h,"settings.selection_clicks","Adjustment selection click","Play selection and exit clicks for adjustment mode.","checkbox",nullptr,false);
-    api->Meta_AddCustomSetting(h,"settings.servo_sound","Adjustment servo sound","Play a quiet motor sound while a mirror or seat is moving.","checkbox",nullptr,false);
-    api->Meta_AddCustomSetting(h,"settings.voice_cues","Adjustment voice cues","Announce the selected mirror or seat when adjustment starts or switches.","checkbox",nullptr,false);
+    api->Meta_AddCustomSetting(h,"settings.servo_sound","Adjustment servo sound","Play a quiet motor sound while a mirror, seat or steering wheel is moving.","checkbox",nullptr,false);
+    api->Meta_AddCustomSetting(h,"settings.voice_cues","Adjustment voice cues","Announce the selected mirror, seat or steering wheel when adjustment starts or switches.","checkbox",nullptr,false);
     api->Meta_AddCustomSetting(h,"settings.hold_selectors","Hold adjustment selector","Off: tap to toggle. On: hold selector while adjusting; release to exit.","checkbox",nullptr,false);
     api->Defaults_SetLogging(h,"info",true);
     if(DefaultBindingNeeded(saved,"Move","left")) api->Defaults_AddKeybind(h,"Move","left","keyboard","KEY_A","manual");
     if(DefaultBindingNeeded(saved,"Move","right")) api->Defaults_AddKeybind(h,"Move","right","keyboard","KEY_D","manual");
     if(DefaultBindingNeeded(saved,"Move","up")) api->Defaults_AddKeybind(h,"Move","up","keyboard","KEY_W","manual");
     if(DefaultBindingNeeded(saved,"Move","down")) api->Defaults_AddKeybind(h,"Move","down","keyboard","KEY_S","manual");
+    api->Meta_AddKeybind(h,"Select","steering_extension","Select steering wheel extension","A/D retract/extend using current movement assignments.");
+    api->Meta_AddKeybind(h,"Select","steering_tilt","Select steering wheel tilt","W/S increase/decrease tilt using current movement assignments.");
     api->Meta_AddKeybind(h,"Select","seat","Select seat","Toggle or hold; W/S up/down, A/D forward/back using current movement assignments.");
-    api->Meta_AddKeybind(h,"Select","cycle","Cycle mirrors and seat","Toggle: left, center, right, seat, off. Hold: each press advances; release exits.");
+    api->Meta_AddKeybind(h,"Select","cycle","Cycle adjustments","Toggle: left, center, right, seat, extension, tilt, off. Hold: each press advances; release exits.");
     api->Meta_AddKeybind(h,"Select","left","Toggle left mirror","Tap on/off, or switch from another mirror.");
     api->Meta_AddKeybind(h,"Select","right","Toggle right mirror","Tap on/off, or switch from another mirror.");
     api->Meta_AddKeybind(h,"Select","center","Toggle center mirror","Tap on/off, or switch from another mirror.");
@@ -434,7 +440,11 @@ void OnActivated(const SPF_Core_API* api) {
       core->keybinds->Kbind_RegisterActionMetadata(keys,"Select.center","Select center mirror","Toggle or hold to adjust the center mirror.",nullptr,nullptr);
       core->keybinds->Kbind_RegisterActionMetadata(keys,"Select.seat","Select seat","Adjust native seat up/down and forward/back.",nullptr,nullptr);
       core->keybinds->Kbind_Register(keys,"Select.seat",ToggleSeat);
-      core->keybinds->Kbind_RegisterActionMetadata(keys,"Select.cycle","Cycle mirrors and seat","Cycle left, center, right, seat, then off; hold mode wraps to left.",nullptr,nullptr);
+      core->keybinds->Kbind_RegisterActionMetadata(keys,"Select.steering_extension","Select steering wheel extension","Adjust native steering column extension.",nullptr,nullptr);
+      core->keybinds->Kbind_RegisterActionMetadata(keys,"Select.steering_tilt","Select steering wheel tilt","Adjust native steering wheel tilt.",nullptr,nullptr);
+      core->keybinds->Kbind_Register(keys,"Select.steering_extension",ToggleSteeringExtension);
+      core->keybinds->Kbind_Register(keys,"Select.steering_tilt",ToggleSteeringTilt);
+      core->keybinds->Kbind_RegisterActionMetadata(keys,"Select.cycle","Cycle adjustments","Cycle left, center, right, seat, extension, tilt, then off; hold mode wraps to left.",nullptr,nullptr);
       core->keybinds->Kbind_RegisterActionMetadata(keys,"Move.reset","Reset selected mirror","Reset the mirror currently being adjusted.",nullptr,nullptr);
       core->keybinds->Kbind_Register(keys,"Select.left",ToggleLeft);
       core->keybinds->Kbind_Register(keys,"Select.right",ToggleRight);
@@ -486,7 +496,7 @@ void OnUpdate() {
     if(!requestedVoice && voiceCuesEnabled) StopVoiceCue();
     voiceCuesEnabled=requestedVoice;
     selectionClicksEnabled=!core->config || !config || core->config->Cfg_GetBool(config,"settings.selection_clicks",true);
-    if(selectedSlot.load()==6 && !SeatReady()) ExitCenter();
+    if(selectedSlot.load()>=6 && !SeatReady()) ExitCenter();
     UpdateVoiceCue(selectedSlot.load());
     unsigned char mask=0;
     if(selectedSlot.load()>=0 && movementAllowed.load()) {
@@ -494,7 +504,7 @@ void OnUpdate() {
     }
     inputMask.store(mask);
     servoEnabled=!core->config || !config || core->config->Cfg_GetBool(config,"settings.servo_sound",true);
-    servo.SetMirror(selectedSlot.load()==6?4:selectedSlot.load());
+    servo.SetMirror(selectedSlot.load()>=6?4:selectedSlot.load());
     servo.SetPlaying(ServoMovement(selectedSlot.load(),mask,servoEnabled,movementAllowed.load()));
     static bool reported=false;
     if (!reported && HooksReady()) {

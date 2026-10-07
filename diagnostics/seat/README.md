@@ -15,7 +15,8 @@ Build separately from the main plugin:
 
 With ATS closed, install SPF_SeatDiagnostics/SPF_SeatDiagnostics.dll under
 bin/win_x64/plugins/spfPlugins/. Enable SPF_SeatDiagnostics in Plugin Manager.
-The existing Mirror Controls plugin can stay enabled; their hooks differ.
+Disable the current Adjustment Hotkeys (SPF_MirrorControls) plugin during this
+test: native seat and steering controls now share this observer's apply hook.
 Load the Mustang. Use F4 seat adjustment, move one axis at a time with a short
 pause between: forward/backward, up/down, left/right. Then test tilt, rotation,
 and FOV separately. Do not use the old camera-only seat hotkeys in this test.

@@ -44,3 +44,17 @@ Exit voice clip uses 44.1 kHz PCM, matching the dedicated stream loader.
 Leaving adjustment pauses the servo without muting the audio output device.
 
 Exit speech uses the same 25-percent centered output level as the selection audio.
+
+
+Steering-wheel prototype (0.3.0): native extension and tilt are separate,
+bindable selections. The cycle is left mirror, center mirror, right mirror,
+seat, steering extension, steering tilt, off (hold mode wraps).
+Extension: A retracts, D extends. Tilt: W increases, S decreases.
+These use your saved movement assignments. Reset restores only the selected
+steering axis to the vehicle default. Both modes use centered click/servo
+audio, with optional "Adjust steering wheel extension" and
+"Adjust steering wheel tilt" announcements under the existing voice setting.
+No F4 calibration is required. Disable Seat Diagnostics before enabling
+Adjustment Hotkeys: their native apply hooks overlap.
+Live F4 logs verified the native extension field; hotkey steering movement
+still needs an in-game test, including saving and reloading the vehicle.

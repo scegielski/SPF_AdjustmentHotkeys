@@ -69,13 +69,26 @@ int main(int argc,char** argv) {
  seatCurrent[1]=0.1f; CHECK(PrepareSeatValues(seat,seatCurrent,0.1f,4)); CHECK(SeatFloat(seat,0x37c)==0.1f);
  CHECK(!PrepareSeatValues(seat,seatCurrent,0.2f,4)); CHECK(!PrepareSeatValues(seat,seatCurrent,0.1f,12));
  CHECK(PrepareSeatValues(seat,seatCurrent,0.1f,16)); CHECK(SeatFloat(seat,0x37c)==0 && SeatFloat(seat,0x380)==0 && SeatFloat(seat,0x378)==0.02f);
+ // Steering changes only its own native field; reset and bounds are independent.
+ SeatPut(seat,0x3e4,0.5f); SeatPut(seat,0x3f4,0.5f);
+ SeatPut(seat,0x3dc,0.f); SeatPut(seat,0x3e0,1.f); SeatPut(seat,0x3ec,0.f); SeatPut(seat,0x3f0,1.f);
+ seatCurrent={0.02f,0.01f,-0.01f,0.1f,0.2f,0.3f,0.4f,0.5f};
+ CHECK(PrepareSeatValues(seat,seatCurrent,0.1f,2,7));
+ CHECK(std::abs(SeatFloat(seat,0x3e8)-0.825f)<0.00001f && SeatFloat(seat,0x3d8)==0.7f);
+ CHECK(SeatFloat(seat,0x37c)==0.01f && SeatFloat(seat,0x380)==-0.01f && SeatFloat(seat,0x3c8)==0.1f);
+ CHECK(!PrepareSeatValues(seat,seatCurrent,0.1f,4,7));
+ CHECK(PrepareSeatValues(seat,seatCurrent,0.1f,4,8)); CHECK(std::abs(SeatFloat(seat,0x3d8)-0.725f)<0.00001f);
+ CHECK(PrepareSeatValues(seat,seatCurrent,0.1f,16,7)); CHECK(SeatFloat(seat,0x3e8)==0.5f && SeatFloat(seat,0x3d8)==0.7f);
+ seatCurrent[5]=0.5f; CHECK(PrepareSeatValues(seat,seatCurrent,0.1f,2,7)); CHECK(SeatFloat(seat,0x3e8)==1.f);
+ CHECK(ResolveHeldSelection(-1,16,0)==7); CHECK(ResolveHeldSelection(7,0,16)==-1);
+ CHECK(ResolveHeldSelection(-1,32,0)==8); CHECK(ResolveHeldSelection(8,0,32)==-1);
  gSeatUiOriginal=reinterpret_cast<void*>(TestSeatUiPass); gSeatApplyReturn=reinterpret_cast<void*>(TestSeatUiBypass);
  unsigned char carry=0; gSyntheticSeatContext=123;
  CHECK(RunSeatUiStub(123,&carry)==22 && carry==1);
  CHECK(RunSeatUiStub(124,&carry)==11 && carry==1);
  gSyntheticSeatContext=0; CHECK(RunSeatUiStub(0,&carry)==11 && carry==1);
 
- voiceCuesEnabled=true; playCueSound=StubCue; cuePaths={L"left.wav",L"center.wav",L"right.wav",L"seat.wav",L"off.wav"};
+ voiceCuesEnabled=true; playCueSound=StubCue; cuePaths={L"left.wav",L"center.wav",L"right.wav",L"seat.wav",L"off.wav",L"steering_extension.wav",L"steering_tilt.wav"};
  playSelectionClick=StubClick;
  CHECK(CueIndex(0)==0 && CueIndex(4)==1 && CueIndex(2)==2 && CueIndex(-1)==-1);
  UpdateVoiceCue(0); CHECK(cueCalls==1 && lastCue==L"left.wav" && (cueFlags&SND_ASYNC));
@@ -98,6 +111,8 @@ int main(int argc,char** argv) {
  UpdateVoiceCue(6); CHECK(lastCue==L"seat.wav" && lastClickSlot==6);
  UpdateVoiceCue(-1); CHECK(lastCue==L"off.wav" && lastClickSlot==-1);
  // Exit feedback is emitted synchronously even without another OnUpdate tick.
+ UpdateVoiceCue(7); CHECK(lastCue==L"steering_extension.wav" && lastClickSlot==7);
+ UpdateVoiceCue(8); CHECK(lastCue==L"steering_tilt.wav" && lastClickSlot==8);
  UpdateVoiceCue(6); selectedSlot=6; const int beforeExit=cueCalls;
  ExitCenter(); CHECK(selectedSlot==-1 && cueCalls==beforeExit+1 && lastCue==L"off.wav" && lastClickSlot==-1);
  ExitCenter(); UpdateVoiceCue(-1); CHECK(cueCalls==beforeExit+1);
@@ -118,6 +133,8 @@ int main(int argc,char** argv) {
  CHECK(ServoMovement(0,1,true,true)); CHECK(ServoMovement(4,4,true,true));
  CHECK(!ServoMovement(0,0,true,true)); CHECK(!ServoMovement(-1,1,true,true));
  CHECK(!ServoMovement(0,3,true,true)); CHECK(!ServoMovement(0,12,true,true));
+ CHECK(ServoMovement(7,2,true,true)); CHECK(!ServoMovement(7,4,true,true));
+ CHECK(ServoMovement(8,4,true,true)); CHECK(!ServoMovement(8,2,true,true));
  CHECK(!ServoMovement(0,16,true,true)); CHECK(!ServoMovement(0,1,false,true)); CHECK(!ServoMovement(0,1,true,false));
  ServoWaveHeader wav{}; std::memcpy(wav.riff,"RIFF",4); std::memcpy(wav.wave,"WAVE",4); std::memcpy(wav.fmt,"fmt ",4); std::memcpy(wav.data,"data",4);
  wav.fmtSize=16; wav.format=1; wav.channels=1; wav.bits=16; wav.rate=44100; wav.align=2; wav.byteRate=88200; wav.bytes=44100;
@@ -152,8 +169,8 @@ int main(int argc,char** argv) {
  CHECK(ResolveHeldSelection(-1,4,0)==4);
  CHECK(ResolveHeldSelection(-1,7,0)==4);
  CHECK(ResolveHeldSelection(4,0,4)==-1);
- CHECK(NextCycleSlot(-1,false)==0); CHECK(NextCycleSlot(0,false)==4); CHECK(NextCycleSlot(4,false)==2); CHECK(NextCycleSlot(2,false)==6); CHECK(NextCycleSlot(6,false)==-1);
- CHECK(NextCycleSlot(-1,true)==0); CHECK(NextCycleSlot(0,true)==4); CHECK(NextCycleSlot(4,true)==2); CHECK(NextCycleSlot(2,true)==6); CHECK(NextCycleSlot(6,true)==0);
+ CHECK(NextCycleSlot(-1,false)==0); CHECK(NextCycleSlot(0,false)==4); CHECK(NextCycleSlot(4,false)==2); CHECK(NextCycleSlot(2,false)==6); CHECK(NextCycleSlot(6,false)==7); CHECK(NextCycleSlot(7,false)==8); CHECK(NextCycleSlot(8,false)==-1);
+ CHECK(NextCycleSlot(-1,true)==0); CHECK(NextCycleSlot(0,true)==4); CHECK(NextCycleSlot(4,true)==2); CHECK(NextCycleSlot(2,true)==6); CHECK(NextCycleSlot(6,true)==7); CHECK(NextCycleSlot(7,true)==8); CHECK(NextCycleSlot(8,true)==0);
  CHECK(ResolveHeldWithCycle(4,0,0,true,4)==4);
  CHECK(ResolveHeldWithCycle(4,0,0,false,4)==-1);
  CHECK(ResolveHeldWithCycle(4,1,0,true,4)==0);
